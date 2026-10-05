@@ -49,12 +49,7 @@ export const extractTextFromImage = async (
     };
 
     const knownModels = [
-      'gemini-2.5-flash',
-      'gemini-2.5-pro',
-      'gemini-2.0-flash',
-      'gemini-2.0-pro',
-      'gemini-1.5-flash',
-      'gemini-1.5-pro'
+      'gemini-3.8-flash'
     ];
 
     let response = null;
@@ -74,14 +69,36 @@ export const extractTextFromImage = async (
           break; // Success!
         } else {
           const errData = await res.json();
-          lastErrorMsg = errData.error?.message || `Failed on ${model}`;
-          // If it's a 404 (model not found), continue loop. If it's a 403 (bad key), throw immediately.
-          if (errData.error?.code === 403 || errData.error?.code === 401) {
-            throw new Error("Invalid API Key. Please check your App Settings.");
+          const apiError = errData.error;
+          lastErrorMsg = apiError?.message || `Failed on ${model}`;
+
+          if (res.status === 404) {
+            continue;
           }
+
+          if (
+            res.status === 401 ||
+            /api key not valid|invalid api key|api_key_invalid/i.test(lastErrorMsg)
+          ) {
+            throw new Error(
+              'Gemini rejected the API key. Check VITE_GEMINI_API_KEY in .env, confirm the key is enabled for the Gemini API, then restart the Vite server.'
+            );
+          }
+
+          if (res.status === 403 || apiError?.code === 403) {
+            throw new Error(`Gemini API access denied: ${lastErrorMsg}`);
+          }
+
+          throw new Error(`Gemini request failed (${res.status}): ${lastErrorMsg}`);
         }
       } catch (e: any) {
-        if (e.message.includes("Invalid API Key")) throw e;
+        if (
+          e.message.includes('Gemini rejected the API key') ||
+          e.message.includes('Gemini API access denied') ||
+          e.message.includes('Gemini request failed')
+        ) {
+          throw e;
+        }
         lastErrorMsg = e.message;
       }
     }
