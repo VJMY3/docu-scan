@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { X, Check, Lock, Sparkles, Key, Eye, EyeOff, ExternalLink, Cpu } from 'lucide-react';
-import { getStoredConfig, saveConfig, DEFAULT_GEMINI_MODEL } from '../../services/supabaseClient';
+import { X, Check, Lock, Sparkles, Key, Eye, EyeOff, ExternalLink, Cpu, Database, RefreshCw, AlertTriangle } from 'lucide-react';
+import { getStoredConfig, saveConfig, DEFAULT_GEMINI_MODEL, testSupabaseConnection } from '../../services/supabaseClient';
 import type { AppConfig } from '../../types/document';
 
 interface SettingsModalProps {
@@ -56,9 +56,14 @@ export const SettingsModal = ({ onClose }: SettingsModalProps) => {
   const [config, setConfig] = useState<AppConfig>({
     geminiKey: '',
     geminiModel: DEFAULT_GEMINI_MODEL,
+    supabaseUrl: '',
+    supabaseAnonKey: '',
     passcode: '1234'
   });
-  const [showKey, setShowKey] = useState(false);
+  const [showGeminiKey, setShowGeminiKey] = useState(false);
+  const [showAnonKey, setShowAnonKey] = useState(false);
+  const [isTestingSupabase, setIsTestingSupabase] = useState(false);
+  const [supabaseTestResult, setSupabaseTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [status, setStatus] = useState<{ type: 'idle' | 'success' | 'error'; msg: string }>({ type: 'idle', msg: '' });
 
   useEffect(() => {
@@ -66,6 +71,17 @@ export const SettingsModal = ({ onClose }: SettingsModalProps) => {
   }, []);
 
   const selectedModelInfo = MODEL_OPTIONS.find(m => m.id === (config.geminiModel || DEFAULT_GEMINI_MODEL)) || MODEL_OPTIONS[0];
+
+  const handleTestSupabase = async () => {
+    setIsTestingSupabase(true);
+    setSupabaseTestResult(null);
+    try {
+      const res = await testSupabaseConnection(config.supabaseUrl || '', config.supabaseAnonKey || '');
+      setSupabaseTestResult(res);
+    } finally {
+      setIsTestingSupabase(false);
+    }
+  };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -76,7 +92,7 @@ export const SettingsModal = ({ onClose }: SettingsModalProps) => {
     }
 
     saveConfig(config);
-    setStatus({ type: 'success', msg: 'Settings saved successfully! The app will now use your key and model.' });
+    setStatus({ type: 'success', msg: 'Settings saved successfully! The app will now use your configuration.' });
 
     setTimeout(() => {
       onClose();
@@ -90,7 +106,7 @@ export const SettingsModal = ({ onClose }: SettingsModalProps) => {
       display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
       padding: '1rem'
     }}>
-      <div className="glass-panel" style={{ width: '100%', maxWidth: '540px', maxHeight: '90vh', overflowY: 'auto', padding: '2rem', position: 'relative' }}>
+      <div className="glass-panel" style={{ width: '100%', maxWidth: '580px', maxHeight: '90vh', overflowY: 'auto', padding: '2rem', position: 'relative' }}>
         <button onClick={onClose} style={{ position: 'absolute', top: '1.5rem', right: '1.5rem', background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>
           <X size={24} />
         </button>
@@ -116,7 +132,7 @@ export const SettingsModal = ({ onClose }: SettingsModalProps) => {
               </label>
               <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                 <input 
-                  type={showKey ? 'text' : 'password'}
+                  type={showGeminiKey ? 'text' : 'password'}
                   className="input-field" 
                   placeholder="AIzaSy..."
                   value={config.geminiKey}
@@ -125,14 +141,14 @@ export const SettingsModal = ({ onClose }: SettingsModalProps) => {
                 />
                 <button
                   type="button"
-                  onClick={() => setShowKey(!showKey)}
+                  onClick={() => setShowGeminiKey(!showGeminiKey)}
                   style={{
                     position: 'absolute', right: '0.75rem', background: 'transparent',
                     border: 'none', color: 'var(--text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center'
                   }}
-                  title={showKey ? 'Hide key' : 'Show key'}
+                  title={showGeminiKey ? 'Hide key' : 'Show key'}
                 >
-                  {showKey ? <EyeOff size={18} /> : <Eye size={18} />}
+                  {showGeminiKey ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.35rem' }}>
@@ -199,6 +215,93 @@ export const SettingsModal = ({ onClose }: SettingsModalProps) => {
                 {selectedModelInfo.desc}
               </div>
             </div>
+          </div>
+
+          {/* Supabase Database Section */}
+          <div style={{ marginBottom: '1.75rem', paddingBottom: '1.5rem', borderBottom: '1px solid var(--border-color)' }}>
+            <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem', color: '#38bdf8', fontSize: '1.1rem' }}>
+              <Database size={18} /> Supabase Cloud Database
+            </h3>
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '1rem', lineHeight: '1.4' }}>
+              Configure your Supabase cloud backend. Note: Free Supabase projects are automatically paused after 7 days of inactivity.
+            </p>
+
+            <div className="input-group">
+              <label className="input-label">Supabase Project URL</label>
+              <input 
+                type="text"
+                className="input-field" 
+                placeholder="https://xyz.supabase.co"
+                value={config.supabaseUrl || ''}
+                onChange={e => setConfig({ ...config, supabaseUrl: e.target.value.trim() })}
+              />
+            </div>
+
+            <div className="input-group">
+              <label className="input-label">Supabase Anon Public Key</label>
+              <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                <input 
+                  type={showAnonKey ? 'text' : 'password'}
+                  className="input-field" 
+                  placeholder="eyJhbGci..."
+                  value={config.supabaseAnonKey || ''}
+                  onChange={e => setConfig({ ...config, supabaseAnonKey: e.target.value.trim() })}
+                  style={{ width: '100%', paddingRight: '2.75rem' }}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowAnonKey(!showAnonKey)}
+                  style={{
+                    position: 'absolute', right: '0.75rem', background: 'transparent',
+                    border: 'none', color: 'var(--text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center'
+                  }}
+                  title={showAnonKey ? 'Hide key' : 'Show key'}
+                >
+                  {showAnonKey ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginTop: '0.75rem', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                onClick={handleTestSupabase}
+                disabled={isTestingSupabase}
+                className="btn btn-secondary"
+                style={{ fontSize: '0.85rem', padding: '0.5rem 0.9rem' }}
+              >
+                <RefreshCw size={14} className={isTestingSupabase ? 'animate-pulse' : ''} />
+                {isTestingSupabase ? 'Testing Connection...' : 'Test Connection'}
+              </button>
+              <a
+                href="https://supabase.com/dashboard"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ color: '#38bdf8', fontSize: '0.8rem', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}
+              >
+                Open Supabase Dashboard <ExternalLink size={12} />
+              </a>
+            </div>
+
+            {/* Test Connection Result Box */}
+            {supabaseTestResult && (
+              <div style={{
+                marginTop: '0.75rem',
+                padding: '0.75rem',
+                borderRadius: '8px',
+                fontSize: '0.8rem',
+                lineHeight: '1.4',
+                background: supabaseTestResult.success ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                color: supabaseTestResult.success ? 'var(--success-color)' : 'var(--danger-color)',
+                border: supabaseTestResult.success ? '1px solid rgba(16, 185, 129, 0.2)' : '1px solid rgba(239, 68, 68, 0.2)',
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: '0.5rem'
+              }}>
+                {supabaseTestResult.success ? <Check size={16} style={{ marginTop: '2px', flexShrink: 0 }} /> : <AlertTriangle size={16} style={{ marginTop: '2px', flexShrink: 0 }} />}
+                <div>{supabaseTestResult.message}</div>
+              </div>
+            )}
           </div>
 
           {/* Authentication / PIN Section */}

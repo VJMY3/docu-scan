@@ -72,8 +72,15 @@ function App() {
     setIsProcessing(true);
     
     try {
-      // 1. Upload to Supabase Storage
-      let finalImageUrl = URL.createObjectURL(file); // fallback
+      // 1. Prepare persistent image URL fallback
+      let finalImageUrl = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = () => resolve(URL.createObjectURL(file));
+        reader.readAsDataURL(file);
+      });
+
+      // Try uploading to Supabase Storage if available
       const uploadedUrl = await uploadImageToSupabase(file);
       if (uploadedUrl) {
         finalImageUrl = uploadedUrl;
@@ -95,11 +102,15 @@ function App() {
         synced_to_supabase: false
       };
       
-      await saveDocument(newDoc);
+      const savedDoc = await saveDocument(newDoc);
       await refreshData();
       
       if (parsedData.items.length > 0) {
         confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
+      }
+
+      if (!savedDoc.synced_to_supabase) {
+        alert("Scan successful! Saved locally in your browser. Note: Cloud sync to Supabase is pending because the project domain was unreachable (project may be paused).");
       }
     } catch (err: any) {
       alert("Failed to process document: " + (err.message || String(err)));

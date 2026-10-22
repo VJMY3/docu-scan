@@ -39,8 +39,6 @@ insert into storage.buckets (id, name, public) values ('scans', 'scans', true) o
 create policy "Public Access" on storage.objects for all using ( bucket_id = 'scans' );
 `;
 
-export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
 export const DEFAULT_GEMINI_MODEL = 'gemini-3.8-flash';
 
 export const getStoredConfig = (): AppConfig => {
@@ -60,7 +58,8 @@ export const getStoredConfig = (): AppConfig => {
       config = {
         ...config,
         ...parsed,
-        // If the user specified a custom key in settings, use it. Otherwise use env fallback.
+        supabaseUrl: parsed.supabaseUrl !== undefined && parsed.supabaseUrl !== '' ? parsed.supabaseUrl : SUPABASE_URL,
+        supabaseAnonKey: parsed.supabaseAnonKey !== undefined && parsed.supabaseAnonKey !== '' ? parsed.supabaseAnonKey : SUPABASE_ANON_KEY,
         geminiKey: parsed.geminiKey !== undefined && parsed.geminiKey !== '' ? parsed.geminiKey : (import.meta.env.VITE_GEMINI_API_KEY || ''),
         geminiModel: parsed.geminiModel || DEFAULT_GEMINI_MODEL,
       };
@@ -76,25 +75,113 @@ export const saveConfig = (config: AppConfig) => {
   localStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(config));
 };
 
-export const uploadImageToSupabase = async (file: File): Promise<string | null> => {
-  const fileExt = file.name.split('.').pop() || 'jpg';
-  const fileName = `${Math.random().toString(36).substring(2)}-${Date.now()}.${fileExt}`;
-  const filePath = `public/${fileName}`;
+let cachedClient: any = null;
+let lastUsedUrl = '';
+let lastUsedKey = '';
 
-  const { error } = await supabase.storage.from('scans').upload(filePath, file);
-  
-  if (error) {
-    console.error('Upload Error:', error);
+export const getSupabaseClient = (): any => {
+  const config = getStoredConfig();
+  const url = (config.supabaseUrl || SUPABASE_URL || '').trim();
+  const key = (config.supabaseAnonKey || SUPABASE_ANON_KEY || '').trim();
+
+  if (!url || !key) {
     return null;
   }
-  
-  const { data: publicUrlData } = supabase.storage.from('scans').getPublicUrl(filePath);
-  return publicUrlData.publicUrl;
+
+  if (!cachedClient || lastUsedUrl !== url || lastUsedKey !== key) {
+    lastUsedUrl = url;
+    lastUsedKey = key;
+    try {
+      cachedClient = createClient(url, key);
+    } catch (e) {
+      console.error("Failed to initialize Supabase client:", e);
+      return null;
+    }
+  }
+
+  return cachedClient;
+};
+
+// Dynamic proxy so existing code calling `supabase` uses the active credentials
+export const supabase = new Proxy({} as any, {
+  get: (_target, prop) => {
+    const client = getSupabaseClient();
+    if (!client) {
+      throw new Error("Supabase is not configured. Please enter your Supabase URL and Anon Key in Settings.");
+    }
+    return (client as any)[prop];
+  }
+});
+
+export const testSupabaseConnection = async (
+  url: string, 
+  key: string
+): Promise<{ success: boolean; message: string }> => {
+  const cleanUrl = url.trim().replace(/\/$/, '');
+  const cleanKey = key.trim();
+
+  if (!cleanUrl || !cleanKey) {
+    return { success: false, message: "Both Supabase Project URL and Anon Key are required." };
+  }
+
+  try {
+    const res = await fetch(`${cleanUrl}/rest/v1/`, {
+      method: 'GET',
+      headers: {
+        apikey: cleanKey,
+        Authorization: `Bearer ${cleanKey}`
+      }
+    });
+
+    if (res.ok) {
+      return { success: true, message: "Connected to Supabase successfully!" };
+    }
+
+    return {
+      success: false,
+      message: `Supabase responded with HTTP ${res.status} (${res.statusText}). Check your Anon Key.`
+    };
+  } catch (err: any) {
+    console.error("Supabase connection test failed:", err);
+    return {
+      success: false,
+      message: "ERR_NAME_NOT_RESOLVED: Domain not found. Your Supabase project is likely PAUSED due to inactivity, or the URL has a typo. Unpause it at supabase.com/dashboard."
+    };
+  }
+};
+
+export const uploadImageToSupabase = async (file: File): Promise<string | null> => {
+  try {
+    const client = getSupabaseClient();
+    if (!client) return null;
+
+    const fileExt = file.name.split('.').pop() || 'jpg';
+    const fileName = `${Math.random().toString(36).substring(2)}-${Date.now()}.${fileExt}`;
+    const filePath = `public/${fileName}`;
+
+    const { error } = await client.storage.from('scans').upload(filePath, file);
+    
+    if (error) {
+      console.warn('Supabase storage upload failed:', error.message || error);
+      return null;
+    }
+    
+    const { data: publicUrlData } = client.storage.from('scans').getPublicUrl(filePath);
+    return publicUrlData.publicUrl;
+  } catch (err: any) {
+    console.warn('Supabase storage upload exception:', err.message || err);
+    return null;
+  }
 };
 
 export const syncDocumentToSupabase = async (doc: DocumentRecord): Promise<boolean> => {
+  const client = getSupabaseClient();
+  if (!client) {
+    throw new Error("Supabase is not configured.");
+  }
+
   // 1. Upsert Scan Record
-  const { error: scanError } = await supabase
+  const { error: scanError } = await client
     .from('inventory_scans')
     .upsert({
       id: doc.id,
@@ -109,11 +196,11 @@ export const syncDocumentToSupabase = async (doc: DocumentRecord): Promise<boole
 
   if (scanError) {
     console.error('Supabase Sync Error (Scans):', scanError);
-    throw new Error(`Database Error: ${scanError.message}`);
+    throw new Error(scanError.message);
   }
 
   // 2. Delete existing items for this scan to replace them
-  await supabase.from('inventory_items').delete().eq('scan_id', doc.id);
+  await client.from('inventory_items').delete().eq('scan_id', doc.id);
 
   // 3. Insert new items
   if (doc.items.length > 0) {
@@ -124,13 +211,13 @@ export const syncDocumentToSupabase = async (doc: DocumentRecord): Promise<boole
       quantity: item.quantity
     }));
 
-    const { error: itemsError } = await supabase
+    const { error: itemsError } = await client
       .from('inventory_items')
       .insert(itemsToInsert);
       
     if (itemsError) {
       console.error('Supabase Sync Error (Items):', itemsError);
-      throw new Error(`Database Error: ${itemsError.message}`);
+      throw new Error(itemsError.message);
     }
   }
 
@@ -138,55 +225,70 @@ export const syncDocumentToSupabase = async (doc: DocumentRecord): Promise<boole
 };
 
 export const fetchDocumentsFromSupabase = async (): Promise<DocumentRecord[] | null> => {
-  const { data: scans, error: scansError } = await supabase
-    .from('inventory_scans')
-    .select('*')
-    .order('created_at', { ascending: false });
+  try {
+    const client = getSupabaseClient();
+    if (!client) return null;
 
-  if (scansError) {
-    console.error('Supabase Fetch Error (Scans):', scansError);
+    const { data: scans, error: scansError } = await client
+      .from('inventory_scans')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (scansError) {
+      console.warn('Supabase Fetch Error (Scans):', scansError.message || scansError);
+      return null;
+    }
+
+    const { data: items, error: itemsError } = await client
+      .from('inventory_items')
+      .select('*');
+
+    if (itemsError) {
+      console.warn('Supabase Fetch Error (Items):', itemsError.message || itemsError);
+      return null;
+    }
+
+    const completeDocs: DocumentRecord[] = (scans || []).map((scan: any) => {
+      const scanItems = (items || []).filter((i: any) => i.scan_id === scan.id).map((i: any) => ({
+        id: i.id,
+        item_name: i.item_name,
+        quantity: i.quantity
+      }));
+
+      return {
+        id: scan.id,
+        title: scan.title,
+        document_date: scan.document_date,
+        image_url: scan.image_url,
+        status: scan.status as any,
+        raw_text: scan.raw_text,
+        items: scanItems,
+        created_at: scan.created_at,
+        updated_at: scan.updated_at,
+        synced_to_supabase: true
+      };
+    });
+
+    return completeDocs;
+  } catch (err: any) {
+    console.warn('Supabase fetch exception (network/paused/DNS):', err.message || err);
     return null;
   }
-
-  const { data: items, error: itemsError } = await supabase
-    .from('inventory_items')
-    .select('*');
-
-  if (itemsError) {
-    console.error('Supabase Fetch Error (Items):', itemsError);
-    return null;
-  }
-
-  // Combine
-  const completeDocs: DocumentRecord[] = scans.map(scan => {
-    const scanItems = items.filter(i => i.scan_id === scan.id).map(i => ({
-      id: i.id,
-      item_name: i.item_name,
-      quantity: i.quantity
-    }));
-
-    return {
-      id: scan.id,
-      title: scan.title,
-      document_date: scan.document_date,
-      image_url: scan.image_url,
-      status: scan.status as any,
-      raw_text: scan.raw_text,
-      items: scanItems,
-      created_at: scan.created_at,
-      updated_at: scan.updated_at,
-      synced_to_supabase: true
-    };
-  });
-
-  return completeDocs;
 };
 
 export const deleteDocumentFromSupabase = async (id: string): Promise<boolean> => {
-  const { error } = await supabase.from('inventory_scans').delete().eq('id', id);
-  if (error) {
-    console.error('Supabase Delete Error:', error);
+  try {
+    const client = getSupabaseClient();
+    if (!client) return false;
+
+    const { error } = await client.from('inventory_scans').delete().eq('id', id);
+    if (error) {
+      console.error('Supabase Delete Error:', error);
+      return false;
+    }
+    return true;
+  } catch (err: any) {
+    console.warn('Supabase delete exception:', err.message || err);
     return false;
   }
-  return true;
 };
