@@ -109,15 +109,18 @@ export const extractTextFromImage = async (
       }
     };
 
-    // Prioritize Gemini 3 and 3.8 models, with resilient fallbacks
-    const knownModels = [
+    // User's preferred Gemini model first, followed by resilient fallbacks
+    const selectedModel = config.geminiModel || 'gemini-3.8-flash';
+    const fallbackModels = [
       'gemini-3.8-flash',
       'gemini-3.8-pro',
       'gemini-3-flash',
       'gemini-3-pro',
       'gemini-2.5-flash',
+      'gemini-2.5-pro',
       'gemini-2.0-flash'
     ];
+    const knownModels = [selectedModel, ...fallbackModels.filter(m => m !== selectedModel)];
 
     let response: Response | null = null;
     let lastErrorMsg = "";

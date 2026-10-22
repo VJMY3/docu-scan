@@ -63,7 +63,8 @@ function App() {
   const handleProcessImage = async (file: File) => {
     const config = getStoredConfig();
     if (!config.geminiKey) {
-      alert("Please configure your VITE_GEMINI_API_KEY in the .env file and restart the server.");
+      alert("Please configure your Gemini API Key in App Settings to scan documents.");
+      setShowConfig(true);
       return;
     }
 
@@ -141,7 +142,18 @@ function App() {
           <button className="btn" style={{ justifyContent: 'flex-start', background: 'rgba(255,255,255,0.1)', color: 'white' }}>
             <Menu size={18} /> Dashboard
           </button>
-          <button onClick={() => setShowCamera(true)} className="btn" style={{ justifyContent: 'flex-start', background: 'transparent', color: 'var(--text-muted)' }}>
+          <button 
+            onClick={() => {
+              const cfg = getStoredConfig();
+              if (!cfg.geminiKey) {
+                setShowConfig(true);
+                return;
+              }
+              setShowCamera(true);
+            }} 
+            className="btn" 
+            style={{ justifyContent: 'flex-start', background: 'transparent', color: 'var(--text-muted)' }}
+          >
             <Camera size={18} /> Scan Document
           </button>
         </nav>
@@ -154,24 +166,74 @@ function App() {
       </div>
 
       <div className="main-content">
-        <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2.5rem' }}>
+        <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', flexWrap: 'wrap', gap: '1rem' }}>
           <div>
             <h1 style={{ margin: '0 0 0.5rem 0', fontSize: '2rem' }}>Overview</h1>
-            <p style={{ margin: 0, color: 'var(--text-muted)' }}>Extract tabular inventory lists using Gemini Vision.</p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
+              <p style={{ margin: 0, color: 'var(--text-muted)' }}>Extract tabular inventory lists using Gemini Vision.</p>
+              <span style={{
+                fontSize: '0.75rem',
+                padding: '2px 8px',
+                borderRadius: '12px',
+                background: 'rgba(99, 102, 241, 0.15)',
+                color: '#a5b4fc',
+                border: '1px solid rgba(99, 102, 241, 0.3)',
+                fontWeight: 500
+              }}>
+                Model: {getStoredConfig().geminiModel || 'gemini-3.8-flash'}
+              </span>
+            </div>
           </div>
           <div style={{ display: 'flex', gap: '1rem' }}>
-            <button onClick={refreshData} disabled={isRefreshing} className="btn btn-secondary" style={{ padding: '0.5rem 1rem' }}>
+            <button onClick={refreshData} disabled={isRefreshing} className="btn btn-secondary" style={{ padding: '0.5rem 1rem' }} title="Refresh list">
               <RefreshCw size={18} className={isRefreshing ? 'animate-pulse' : ''} />
             </button>
-            <button onClick={() => setShowCamera(true)} className="btn btn-primary">
+            <button 
+              onClick={() => {
+                const cfg = getStoredConfig();
+                if (!cfg.geminiKey) {
+                  setShowConfig(true);
+                  return;
+                }
+                setShowCamera(true);
+              }} 
+              className="btn btn-primary"
+            >
               <Camera size={18} /> Scan List
             </button>
           </div>
         </header>
 
+        {!getStoredConfig().geminiKey && (
+          <div className="glass-panel" style={{
+            padding: '1rem 1.25rem',
+            marginBottom: '2rem',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '1rem',
+            background: 'rgba(234, 179, 8, 0.1)',
+            border: '1px solid rgba(234, 179, 8, 0.3)',
+            borderRadius: '12px',
+            color: '#fef08a'
+          }}>
+            <div>
+              <strong style={{ display: 'block', fontSize: '0.95rem' }}>Gemini API Key Required</strong>
+              <span style={{ fontSize: '0.85rem', color: '#fef9c3' }}>
+                Please provide your Gemini API key in Settings to scan documents and extract tables.
+              </span>
+            </div>
+            <button onClick={() => setShowConfig(true)} className="btn btn-secondary" style={{ whiteSpace: 'nowrap', padding: '0.4rem 0.9rem', fontSize: '0.85rem' }}>
+              Configure Key
+            </button>
+          </div>
+        )}
+
         {isProcessing && (
           <div className="glass-panel animate-pulse" style={{ padding: '2rem', marginBottom: '2rem', textAlign: 'center', border: '1px solid var(--primary-color)' }}>
-            <h3 style={{ marginBottom: '1rem', color: 'var(--primary-color)' }}>Gemini AI is analyzing handwriting...</h3>
+            <h3 style={{ marginBottom: '1rem', color: 'var(--primary-color)' }}>
+              {getStoredConfig().geminiModel || 'Gemini'} is analyzing handwriting...
+            </h3>
             <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.9rem' }}>Uploading image to Supabase and parsing tabular data...</p>
           </div>
         )}

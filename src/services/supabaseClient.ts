@@ -41,22 +41,34 @@ create policy "Public Access" on storage.objects for all using ( bucket_id = 'sc
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+export const DEFAULT_GEMINI_MODEL = 'gemini-3.8-flash';
+
 export const getStoredConfig = (): AppConfig => {
   const saved = localStorage.getItem(CONFIG_STORAGE_KEY);
-  let config: AppConfig = { supabaseUrl: SUPABASE_URL, supabaseAnonKey: SUPABASE_ANON_KEY, geminiKey: '', autoSync: true, passcode: '1234' };
+  let config: AppConfig = {
+    supabaseUrl: SUPABASE_URL,
+    supabaseAnonKey: SUPABASE_ANON_KEY,
+    geminiKey: import.meta.env.VITE_GEMINI_API_KEY || '',
+    geminiModel: DEFAULT_GEMINI_MODEL,
+    autoSync: true,
+    passcode: '1234'
+  };
+
   if (saved) {
     try {
-      config = { ...config, ...JSON.parse(saved) };
+      const parsed = JSON.parse(saved);
+      config = {
+        ...config,
+        ...parsed,
+        // If the user specified a custom key in settings, use it. Otherwise use env fallback.
+        geminiKey: parsed.geminiKey !== undefined && parsed.geminiKey !== '' ? parsed.geminiKey : (import.meta.env.VITE_GEMINI_API_KEY || ''),
+        geminiModel: parsed.geminiModel || DEFAULT_GEMINI_MODEL,
+      };
     } catch {
-      // Fallback
+      // Fallback to default config
     }
   }
 
-  // Override with env variables if they exist
-  if (import.meta.env.VITE_GEMINI_API_KEY) {
-    config.geminiKey = import.meta.env.VITE_GEMINI_API_KEY;
-  }
-  
   return config;
 };
 

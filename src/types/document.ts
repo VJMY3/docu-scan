@@ -21,6 +21,7 @@ export interface DocumentRecord {
 
 export interface AppConfig {
   geminiKey: string;
+  geminiModel?: string;
   passcode: string; // 4-digit PIN
   
   // Kept for backward compatibility parsing but not user-editable
