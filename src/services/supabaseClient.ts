@@ -159,10 +159,16 @@ export const uploadImageToSupabase = async (file: File): Promise<string | null> 
     const fileName = `${Math.random().toString(36).substring(2)}-${Date.now()}.${fileExt}`;
     const filePath = `public/${fileName}`;
 
-    const { error } = await client.storage.from('scans').upload(filePath, file);
+    // Add 3s timeout so stalled network fails immediately to base64
+    const uploadPromise = client.storage.from('scans').upload(filePath, file);
+    const timeoutPromise = new Promise<{ error: any }>((resolve) =>
+      setTimeout(() => resolve({ error: new Error('Upload timeout') }), 3000)
+    );
+
+    const { error } = await Promise.race([uploadPromise, timeoutPromise]);
     
     if (error) {
-      console.warn('Supabase storage upload failed:', error.message || error);
+      console.warn('Supabase storage upload failed or timed out:', error.message || error);
       return null;
     }
     
