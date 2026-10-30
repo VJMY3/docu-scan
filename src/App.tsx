@@ -9,16 +9,16 @@ import { DocumentTable } from './components/dashboard/DocumentTable';
 import { DocumentDetailModal } from './components/document/DocumentDetailModal';
 import { DocumentEditForm } from './components/document/DocumentEditForm';
 import {
-  getLocalDocs,
   loadAllDocuments,
   saveDocument,
+  updateDocument,
   deleteDocument,
   getSavedDocumentNames,
   addSavedDocumentName
 } from './services/storageService';
 import { uploadImageToSupabase } from './services/supabaseClient';
 import type { DocumentRecord, DashboardStats } from './types/document';
-import { Camera, ShieldCheck, Settings, Menu, RefreshCw, Lock, Zap, Edit3, Clock } from 'lucide-react';
+import { Camera, ShieldCheck, Settings, Menu, RefreshCw, Lock, Zap, Edit3, Clock, AlertTriangle } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 function App() {
@@ -54,30 +54,23 @@ function App() {
 
   const [isSavingScan, setIsSavingScan] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [dbError, setDbError] = useState<string | null>(null);
 
-  // Load documents when unlocked - Optimistic zero-latency loading
+  // Load documents directly from Supabase Cloud Database (No localStorage used!)
   const refreshData = useCallback(async () => {
     setIsRefreshing(true);
+    setDbError(null);
     try {
-      // 1. Immediately render from local storage (0ms - no waiting for network)
-      const immediateLocalDocs = getLocalDocs();
-      setDocuments(immediateLocalDocs);
-      setSavedNames(getSavedDocumentNames());
-      setStats({
-        totalScans: immediateLocalDocs.length,
-        pendingCount: immediateLocalDocs.filter(d => !d.synced_to_supabase).length
-      });
-
-      // 2. Load and merge any Supabase cloud docs in the background
       const docs = await loadAllDocuments();
       setDocuments(docs);
       setSavedNames(getSavedDocumentNames());
       setStats({
         totalScans: docs.length,
-        pendingCount: docs.filter(d => !d.synced_to_supabase).length
+        pendingCount: 0
       });
-    } catch (e) {
-      console.error("Failed to load documents:", e);
+    } catch (e: any) {
+      console.error("Failed to load documents from Supabase:", e);
+      setDbError(e.message || "Failed to load documents from Supabase. Check your Supabase settings.");
     } finally {
       setIsRefreshing(false);
     }
@@ -89,11 +82,10 @@ function App() {
     }
   }, [isLocked, refreshData]);
 
-  // Handler for successful lock screen authentication
+  // Handler for successful lock screen authentication - Opens Dashboard directly!
   const handleUnlock = () => {
     setIsLocked(false);
-    // Show mode selection modal immediately before starting camera
-    setShowModeModal(true);
+    setShowModeModal(false);
   };
 
   // Speed change helper (configured directly on Dashboard before opening camera)
@@ -120,32 +112,19 @@ function App() {
     setShowCamera(true);
   };
 
-  // Convert File to Base64 Data URL
-  const fileToDataUrl = (file: File): Promise<string> => {
-    return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = () => resolve(URL.createObjectURL(file));
-      reader.readAsDataURL(file);
-    });
-  };
-
-  // Direct save to Database with INSTANT Real-Time UI Reflection!
-  const handleSaveCapturedSnapshot = async (file: File, title: string, mode: ScannerMode) => {
+  // Direct save to Supabase Database & Storage ONLY (No localStorage!)
+  const handleSaveCapturedSnapshot = async (file: File, title: string, mode: ScannerMode): Promise<boolean> => {
     setIsSavingScan(true);
     try {
-      // 1. Save title to persistent names list
-      handleSaveNewName(title);
+      // 1. Upload image DIRECTLY to Supabase Storage bucket 'scans'
+      const uploadedUrl = await uploadImageToSupabase(file);
 
-      // 2. Immediately generate base64 URL so image is instantly viewable
-      const base64Url = await fileToDataUrl(file);
-
-      // 3. Build Document Record
+      // 2. Build Document Record with the Supabase public storage URL
       const newDoc: DocumentRecord = {
         id: crypto.randomUUID(),
         title: title,
         document_date: new Date().toISOString().split('T')[0],
-        image_url: base64Url,
+        image_url: uploadedUrl,
         status: 'verified',
         raw_text: mode === 'auto'
           ? `Automatic ${shutterSpeed}-Second Interval Capture`
@@ -153,77 +132,85 @@ function App() {
         items: [],
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-        synced_to_supabase: false
+        synced_to_supabase: true
       };
 
-      // 4. ⚡ INSTANT OPTIMISTIC UI UPDATE:
-      // Add immediately to React state so user sees it on the dashboard without refreshing!
+      // 3. Save DIRECTLY to Supabase Table 'inventory_scans'
+      await saveDocument(newDoc);
+
+      // 4. Update UI State in Real Time
       setDocuments(prevDocs => [newDoc, ...prevDocs.filter(d => d.id !== newDoc.id)]);
       setStats(prev => ({
         totalScans: prev.totalScans + 1,
-        pendingCount: prev.pendingCount + 1
+        pendingCount: 0
       }));
 
-      // 5. Save to local storage right away
-      await saveDocument(newDoc);
-
-      // 6. In background, upload to Supabase Storage if reachable
-      uploadImageToSupabase(file)
-        .then(async (uploadedUrl) => {
-          if (uploadedUrl) {
-            newDoc.image_url = uploadedUrl;
-            newDoc.synced_to_supabase = true;
-            await saveDocument(newDoc);
-            // Update in React state with cloud URL
-            setDocuments(prev => prev.map(d => d.id === newDoc.id ? { ...d, image_url: uploadedUrl, synced_to_supabase: true } : d));
-          }
-        })
-        .catch(() => {});
+      // Register name for future dropdowns
+      handleSaveNewName(title);
+      return true;
 
     } catch (err: any) {
-      console.error("Failed to save snapshot to database:", err);
+      console.error("Supabase Save Error:", err);
+      const isRls = err.message?.toLowerCase().includes('row-level security') || 
+                    err.message?.toLowerCase().includes('policy');
+      if (isRls) {
+        alert(
+          "⚠️ Supabase Storage Permission Error (RLS Policy)!\n\n" +
+          "Supabase లోని 'scans' స్టోరేజ్ బకెట్ కి ఫొటోలు అప్‌లోడ్ చేయడానికి RLS Permission లేదు.\n\n" +
+          "పరిష్కారం:\n1. Settings లోని 'Supabase SQL Setup Script' ని కాపీ చేయండి.\n2. మీ Supabase ప్రాజెక్ట్ డాష్‌బోర్డ్‌లోని 'SQL Editor' లో పేస్ట్ చేసి RUN చేయండి."
+        );
+        setShowConfig(true);
+      } else {
+        alert(`Supabase Error: ${err.message || 'Failed to save photo to Supabase. Check your Supabase URL & Key in Settings.'}`);
+      }
+      return false;
     } finally {
       setIsSavingScan(false);
     }
   };
 
-  // Close Camera and refresh dashboard instantly
+  // Close Camera and refresh dashboard directly from Supabase
   const handleCloseCamera = () => {
     setShowCamera(false);
     refreshData();
   };
 
-  // Quick file drop upload
+  // Quick file drop upload directly to Supabase
   const handleProcessDroppedFile = async (file: File) => {
     const defaultTitle = `Uploaded Document - ${file.name.replace(/\.[^/.]+$/, "")}`;
-    const userTitle = window.prompt("Enter document title:", defaultTitle);
+    const userTitle = window.prompt("Enter document title for Supabase:", defaultTitle);
     if (userTitle === null) return; // User cancelled
     
     await handleSaveCapturedSnapshot(file, userTitle.trim() || defaultTitle, 'manual');
     confetti({ particleCount: 70, spread: 60, origin: { y: 0.6 } });
   };
 
-  const handleDelete = async (id: string) => {
-    // Immediately remove from UI
-    setDocuments(prev => prev.filter(d => d.id !== id));
-    setStats(prev => ({
-      ...prev,
-      totalScans: Math.max(0, prev.totalScans - 1)
-    }));
-
-    await deleteDocument(id);
-    await refreshData();
-    if (viewingDoc?.id === id) setViewingDoc(null);
-    if (editingDoc?.id === id) setEditingDoc(null);
+  // Delete directly from Supabase
+  const handleDelete = async (id: string, imageUrl?: string) => {
+    try {
+      await deleteDocument(id, imageUrl);
+      setDocuments(prev => prev.filter(d => d.id !== id));
+      setStats(prev => ({
+        ...prev,
+        totalScans: Math.max(0, prev.totalScans - 1)
+      }));
+      if (viewingDoc?.id === id) setViewingDoc(null);
+      if (editingDoc?.id === id) setEditingDoc(null);
+    } catch (err: any) {
+      alert(`Failed to delete scan from Supabase: ${err.message}`);
+    }
   };
 
+  // Update/Rename directly in Supabase
   const handleSaveEdit = async (updatedDoc: DocumentRecord) => {
-    // Immediately update in UI
-    setDocuments(prev => prev.map(d => d.id === updatedDoc.id ? updatedDoc : d));
-    await saveDocument(updatedDoc);
-    await refreshData();
-    if (viewingDoc?.id === updatedDoc.id) {
-      setViewingDoc(updatedDoc);
+    try {
+      await updateDocument(updatedDoc);
+      setDocuments(prev => prev.map(d => d.id === updatedDoc.id ? updatedDoc : d));
+      if (viewingDoc?.id === updatedDoc.id) {
+        setViewingDoc(updatedDoc);
+      }
+    } catch (err: any) {
+      alert(`Failed to update document in Supabase: ${err.message}`);
     }
   };
 
@@ -231,8 +218,6 @@ function App() {
   if (isLocked) {
     return <LockScreen onUnlock={handleUnlock} />;
   }
-
-  const syncedCount = documents.filter(d => d.synced_to_supabase).length;
 
   return (
     <div className="app-container">
@@ -253,7 +238,7 @@ function App() {
           </button>
 
           <button
-            onClick={() => setShowModeModal(true)}
+            onClick={() => handleSelectMode('auto', shutterSpeed)}
             className="btn"
             style={{
               justifyContent: 'flex-start',
@@ -306,7 +291,7 @@ function App() {
           <div>
             <h1 style={{ margin: '0 0 0.5rem 0', fontSize: '2rem' }}>Dashboard Overview</h1>
             <p style={{ margin: 0, color: 'var(--text-muted)' }}>
-              Automatic & Manual ({shutterSpeed}s interval) camera snapshots saved directly to database.
+              100% Supabase Cloud Database & Storage (No Local Storage) • {shutterSpeed}s Interval
             </p>
           </div>
           <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
@@ -315,19 +300,65 @@ function App() {
               disabled={isRefreshing}
               className="btn btn-secondary"
               style={{ padding: '0.65rem 1rem' }}
-              title="Refresh database records"
+              title="Refresh Supabase records"
             >
               <RefreshCw size={18} className={isRefreshing ? 'animate-pulse' : ''} />
             </button>
             <button
-              onClick={() => setShowModeModal(true)}
+              onClick={() => handleSelectMode('auto', shutterSpeed)}
               className="btn btn-primary"
-              style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.65rem 1.25rem' }}
+              style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.65rem 1.15rem' }}
             >
-              <Camera size={18} /> Open Camera ({shutterSpeed}s)
+              <Zap size={18} /> Auto Camera ({shutterSpeed}s)
+            </button>
+            <button
+              onClick={() => handleSelectMode('manual', shutterSpeed)}
+              className="btn"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                padding: '0.65rem 1.15rem',
+                background: 'rgba(16, 185, 129, 0.2)',
+                border: '1px solid rgba(16, 185, 129, 0.4)',
+                color: '#6ee7b7'
+              }}
+            >
+              <Edit3 size={18} /> Manual Camera
             </button>
           </div>
         </header>
+
+        {/* Database Error Banner if Supabase connection fails */}
+        {dbError && (
+          <div className="glass-panel" style={{
+            padding: '1rem 1.25rem',
+            marginBottom: '1.75rem',
+            background: 'rgba(239, 68, 68, 0.12)',
+            border: '1.5px solid rgba(239, 68, 68, 0.4)',
+            borderRadius: '14px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '1rem'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <AlertTriangle size={24} color="#f87171" />
+              <div>
+                <strong style={{ color: '#fca5a5', display: 'block', fontSize: '0.95rem' }}>
+                  Supabase Connection Warning
+                </strong>
+                <span style={{ fontSize: '0.85rem', color: '#fecaca' }}>
+                  {dbError} (Ensure your Supabase project is active and 'scans' storage bucket is created)
+                </span>
+              </div>
+            </div>
+            <button onClick={() => setShowConfig(true)} className="btn btn-secondary" style={{ padding: '0.4rem 0.9rem', fontSize: '0.85rem' }}>
+              Check Supabase Settings
+            </button>
+          </div>
+        )}
 
         {/* 🌟 Prominent Shutter Speed Control Bar on Dashboard (Configured BEFORE opening camera) */}
         <div className="glass-panel" style={{
@@ -451,7 +482,7 @@ function App() {
                 Launch Automatic Mode ({shutterSpeed}s)
               </h3>
               <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.82rem' }}>
-                షట్టర్ అవసరం లేకుండా ప్రతి {shutterSpeed} సెకన్లకు ఆటోమేటిక్ స్నాప్
+                షట్టర్ అవసరం లేకుండా ప్రతి {shutterSpeed} సెకన్లకు సుపబాస్ లో సేవ్ అవుతుంది
               </p>
             </div>
           </div>
@@ -497,11 +528,11 @@ function App() {
         </div>
 
         {/* Database & Scan Stats */}
-        <StatsOverview stats={stats} syncedCount={syncedCount} />
+        <StatsOverview stats={stats} />
 
-        {/* Quick Upload from computer */}
+        {/* Quick Upload from computer directly to Supabase */}
         <div style={{ marginBottom: '2rem' }}>
-          <h2 style={{ marginBottom: '1rem', fontSize: '1.25rem' }}>Quick File Upload</h2>
+          <h2 style={{ marginBottom: '1rem', fontSize: '1.25rem' }}>Upload Photo Directly to Supabase</h2>
           <FileUploader onFileSelect={handleProcessDroppedFile} />
         </div>
 

@@ -1,8 +1,17 @@
 import type { DocumentRecord } from '../types/document';
-import { syncDocumentToSupabase, fetchDocumentsFromSupabase, deleteDocumentFromSupabase } from './supabaseClient';
+import {
+  saveDocumentToSupabase,
+  fetchDocumentsFromSupabase,
+  deleteDocumentFromSupabase,
+  updateDocumentInSupabase
+} from './supabaseClient';
 
-const LOCAL_STORAGE_KEY = 'docuscan_local_documents';
 const SAVED_NAMES_KEY = 'docuscan_saved_document_names';
+
+// Purge any legacy local storage documents immediately so no photos are ever stored locally
+try {
+  localStorage.removeItem('docuscan_local_documents');
+} catch {}
 
 const DEFAULT_NAMES = [
   'Tax Invoice',
@@ -13,14 +22,6 @@ const DEFAULT_NAMES = [
   'ID Card / Aadhar',
   'Inventory Checklist'
 ];
-
-// Helper to wrap promises with timeout so offline/paused networks never hang the app
-const withTimeout = <T>(promise: Promise<T>, ms: number = 3500): Promise<T | null> => {
-  return Promise.race([
-    promise,
-    new Promise<null>((resolve) => setTimeout(() => resolve(null), ms))
-  ]);
-};
 
 export const getSavedDocumentNames = (): string[] => {
   try {
@@ -38,7 +39,6 @@ export const addSavedDocumentName = (name: string): string[] => {
   if (!clean) return getSavedDocumentNames();
 
   const current = getSavedDocumentNames();
-  // Filter out exact case-insensitive matches to bring selected/new to the top
   const filtered = current.filter(n => n.toLowerCase() !== clean.toLowerCase());
   const updated = [clean, ...filtered].slice(0, 50);
 
@@ -50,98 +50,46 @@ export const addSavedDocumentName = (name: string): string[] => {
   return updated;
 };
 
-export const getLocalDocs = (): DocumentRecord[] => {
-  try {
-    const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
-};
-
-export const setLocalDocs = (docs: DocumentRecord[]) => {
-  try {
-    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(docs));
-  } catch (e) {
-    console.warn("Failed to save to localStorage:", e);
-  }
-};
-
+/**
+ * Saves document record directly to Supabase Database.
+ * No localStorage is used for photo or document data.
+ */
 export const saveDocument = async (doc: DocumentRecord): Promise<DocumentRecord> => {
-  const docToSave: DocumentRecord = { ...doc };
-
-  // Also automatically register the document's title to saved names list
-  if (docToSave.title) {
-    addSavedDocumentName(docToSave.title);
+  if (doc.title) {
+    addSavedDocumentName(doc.title);
   }
-
-  // 1. Immediately store locally so it is instantly available without page refresh!
-  const currentDocs = getLocalDocs();
-  const existingIdx = currentDocs.findIndex(d => d.id === doc.id);
-  if (existingIdx >= 0) {
-    currentDocs[existingIdx] = docToSave;
-  } else {
-    currentDocs.unshift(docToSave);
-  }
-  setLocalDocs(currentDocs);
-
-  // 2. Sync to Supabase in background with timeout (Never blocks UI/camera)
-  withTimeout(syncDocumentToSupabase(docToSave), 4000)
-    .then((success) => {
-      if (success) {
-        docToSave.synced_to_supabase = true;
-        const updated = getLocalDocs().map(d => d.id === docToSave.id ? { ...d, synced_to_supabase: true } : d);
-        setLocalDocs(updated);
-      }
-    })
-    .catch((err) => {
-      console.warn("Supabase sync skipped/failed (offline/paused). Document saved locally:", err);
-    });
-
-  return docToSave;
+  return await saveDocumentToSupabase(doc);
 };
 
-export const deleteDocument = async (id: string): Promise<boolean> => {
-  // Delete from local immediately
-  const currentDocs = getLocalDocs().filter(d => d.id !== id);
-  setLocalDocs(currentDocs);
+/**
+ * Updates document record directly in Supabase Database.
+ */
+export const updateDocument = async (doc: DocumentRecord): Promise<boolean> => {
+  if (doc.title) {
+    addSavedDocumentName(doc.title);
+  }
+  return await updateDocumentInSupabase(doc);
+};
 
-  // Try delete from Supabase in background
-  withTimeout(deleteDocumentFromSupabase(id), 3000).catch((err) => {
-    console.warn("Supabase delete failed:", err);
+/**
+ * Deletes document record directly from Supabase Database and removes image from storage.
+ */
+export const deleteDocument = async (id: string, imageUrl?: string): Promise<boolean> => {
+  return await deleteDocumentFromSupabase(id, imageUrl);
+};
+
+/**
+ * Loads all document records directly from Supabase Database.
+ */
+export const loadAllDocuments = async (): Promise<DocumentRecord[]> => {
+  const docs = await fetchDocumentsFromSupabase();
+  
+  // Collect unique titles into dropdown list
+  docs.forEach(d => {
+    if (d.title && !d.title.startsWith('Auto Scan #') && !d.title.startsWith('Doc Scan #')) {
+      addSavedDocumentName(d.title);
+    }
   });
 
-  return true;
-};
-
-export const loadAllDocuments = async (): Promise<DocumentRecord[]> => {
-  const localDocs = getLocalDocs();
-
-  try {
-    // Try fetching from Supabase with a 3.5s timeout so it never hangs if paused/offline
-    const supabaseDocs = await withTimeout(fetchDocumentsFromSupabase(), 3500);
-
-    if (supabaseDocs && supabaseDocs.length > 0) {
-      // Merge: Include Supabase docs, plus any local docs that are not yet synced
-      const supabaseIds = new Set(supabaseDocs.map(d => d.id));
-      const unsyncedLocals = localDocs.filter(d => !supabaseIds.has(d.id));
-
-      const merged = [...unsyncedLocals, ...supabaseDocs];
-      setLocalDocs(merged);
-
-      // Harvest distinct titles from loaded docs into saved names
-      merged.forEach(d => {
-        if (d.title && !d.title.startsWith('Auto Scan #') && !d.title.startsWith('Doc Scan #')) {
-          addSavedDocumentName(d.title);
-        }
-      });
-
-      return merged;
-    }
-  } catch (err) {
-    console.warn("Supabase load skipped (network/offline):", err);
-  }
-
-  // Fallback immediately to localDocs
-  return localDocs;
+  return docs;
 };

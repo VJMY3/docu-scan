@@ -1,13 +1,38 @@
 import { createClient } from '@supabase/supabase-js';
 import type { AppConfig, DocumentRecord } from '../types/document';
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+/**
+ * Normalizes Supabase Project URL to ensure NO duplicate /rest/v1 or subpaths exist.
+ * e.g. "https://xyz.supabase.co/rest/v1" -> "https://xyz.supabase.co"
+ */
+export const normalizeSupabaseUrl = (rawUrl: string): string => {
+  if (!rawUrl) return '';
+  let url = rawUrl.replace(/[\r\n\t "']/g, '').trim();
+  url = url.replace(/\/+$/, '');
+  // Strip out /rest/v1, /rest, /storage/v1, /auth/v1 if inadvertently pasted by user
+  url = url.replace(/\/(rest|auth|storage)(\/v\d+)?(\/.*)?$/i, '');
+  if (url && !url.startsWith('http://') && !url.startsWith('https://')) {
+    url = 'https://' + url;
+  }
+  return url;
+};
+
+export const normalizeSupabaseKey = (rawKey: string): string => {
+  if (!rawKey) return '';
+  return rawKey.replace(/[\r\n\t "']/g, '').trim();
+};
+
+const RAW_ENV_URL = import.meta.env.VITE_SUPABASE_URL || '';
+const RAW_ENV_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+
+const SUPABASE_URL = normalizeSupabaseUrl(RAW_ENV_URL);
+const SUPABASE_ANON_KEY = normalizeSupabaseKey(RAW_ENV_KEY);
 
 const CONFIG_STORAGE_KEY = 'docuscan_app_config';
 
-export const DEFAULT_SUPABASE_SQL = `-- Run this script in your Supabase SQL Editor!
+export const DEFAULT_SUPABASE_SQL = `-- Run this in your Supabase SQL Editor:
 
+-- 1. Create Inventory Scans Table
 CREATE TABLE IF NOT EXISTS public.inventory_scans (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     title TEXT NOT NULL,
@@ -19,52 +44,87 @@ CREATE TABLE IF NOT EXISTS public.inventory_scans (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE TABLE IF NOT EXISTS public.inventory_items (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    scan_id UUID REFERENCES public.inventory_scans(id) ON DELETE CASCADE,
-    item_name TEXT NOT NULL,
-    quantity INTEGER DEFAULT 0,
-    created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- Enable Row Level Security (RLS)
+-- 2. Enable Row Level Security (RLS) on Table
 ALTER TABLE public.inventory_scans ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.inventory_items ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Allow public all scans" ON public.inventory_scans FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Allow public all items" ON public.inventory_items FOR ALL USING (true) WITH CHECK (true);
+-- 3. Allow Public Full Access (read, insert, update, delete) on table
+DROP POLICY IF EXISTS "Allow public all scans" ON public.inventory_scans;
+CREATE POLICY "Allow public all scans" 
+ON public.inventory_scans 
+FOR ALL 
+TO public 
+USING (true) 
+WITH CHECK (true);
 
--- Create Storage Bucket for Images
-insert into storage.buckets (id, name, public) values ('scans', 'scans', true) on conflict do nothing;
-create policy "Public Access" on storage.objects for all using ( bucket_id = 'scans' );
+-- 4. Create Public Storage Bucket for Images
+INSERT INTO storage.buckets (id, name, public) 
+VALUES ('scans', 'scans', true) 
+ON CONFLICT (id) DO UPDATE SET public = true;
+
+-- 5. Storage Policies on storage.objects (Fixes "new row violates row-level security policy")
+DROP POLICY IF EXISTS "Public Access" ON storage.objects;
+DROP POLICY IF EXISTS "Allow public upload to scans" ON storage.objects;
+DROP POLICY IF EXISTS "Allow public read from scans" ON storage.objects;
+DROP POLICY IF EXISTS "Allow public update to scans" ON storage.objects;
+DROP POLICY IF EXISTS "Allow public delete from scans" ON storage.objects;
+
+-- Allow public uploads (INSERT)
+CREATE POLICY "Allow public upload to scans" 
+ON storage.objects 
+FOR INSERT 
+TO public 
+WITH CHECK (bucket_id = 'scans');
+
+-- Allow public viewing/downloading (SELECT)
+CREATE POLICY "Allow public read from scans" 
+ON storage.objects 
+FOR SELECT 
+TO public 
+USING (bucket_id = 'scans');
+
+-- Allow public updates (UPDATE)
+CREATE POLICY "Allow public update to scans" 
+ON storage.objects 
+FOR UPDATE 
+TO public 
+USING (bucket_id = 'scans');
+
+-- Allow public deletion (DELETE)
+CREATE POLICY "Allow public delete from scans" 
+ON storage.objects 
+FOR DELETE 
+TO public 
+USING (bucket_id = 'scans');
 `;
-
-export const DEFAULT_GEMINI_MODEL = 'gemini-3.8-flash';
 
 export const getStoredConfig = (): AppConfig => {
   const saved = localStorage.getItem(CONFIG_STORAGE_KEY);
   let config: AppConfig = {
     supabaseUrl: SUPABASE_URL,
     supabaseAnonKey: SUPABASE_ANON_KEY,
-    geminiKey: import.meta.env.VITE_GEMINI_API_KEY || '',
-    geminiModel: DEFAULT_GEMINI_MODEL,
-    autoSync: true,
+    geminiKey: '',
     passcode: '1234'
   };
 
   if (saved) {
     try {
       const parsed = JSON.parse(saved);
+      const rawUrl = parsed.supabaseUrl !== undefined && parsed.supabaseUrl !== '' ? parsed.supabaseUrl : SUPABASE_URL;
+      const rawKey = parsed.supabaseAnonKey !== undefined && parsed.supabaseAnonKey !== '' ? parsed.supabaseAnonKey : SUPABASE_ANON_KEY;
+
       config = {
         ...config,
         ...parsed,
-        supabaseUrl: parsed.supabaseUrl !== undefined && parsed.supabaseUrl !== '' ? parsed.supabaseUrl : SUPABASE_URL,
-        supabaseAnonKey: parsed.supabaseAnonKey !== undefined && parsed.supabaseAnonKey !== '' ? parsed.supabaseAnonKey : SUPABASE_ANON_KEY,
-        geminiKey: parsed.geminiKey !== undefined && parsed.geminiKey !== '' ? parsed.geminiKey : (import.meta.env.VITE_GEMINI_API_KEY || ''),
-        geminiModel: parsed.geminiModel || DEFAULT_GEMINI_MODEL,
+        supabaseUrl: normalizeSupabaseUrl(rawUrl),
+        supabaseAnonKey: normalizeSupabaseKey(rawKey)
       };
+      
+      // Auto-correct in storage if it had /rest/v1 appended
+      if (parsed.supabaseUrl !== config.supabaseUrl) {
+        localStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(config));
+      }
     } catch {
-      // Fallback to default config
+      // fallback
     }
   }
 
@@ -72,7 +132,16 @@ export const getStoredConfig = (): AppConfig => {
 };
 
 export const saveConfig = (config: AppConfig) => {
-  localStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(config));
+  const sanitized: AppConfig = {
+    ...config,
+    supabaseUrl: normalizeSupabaseUrl(config.supabaseUrl || ''),
+    supabaseAnonKey: normalizeSupabaseKey(config.supabaseAnonKey || '')
+  };
+  localStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(sanitized));
+  // Invalidate cache so new credentials immediately take effect
+  cachedClient = null;
+  lastUsedUrl = '';
+  lastUsedKey = '';
 };
 
 let cachedClient: any = null;
@@ -81,8 +150,8 @@ let lastUsedKey = '';
 
 export const getSupabaseClient = (): any => {
   const config = getStoredConfig();
-  const url = (config.supabaseUrl || SUPABASE_URL || '').trim();
-  const key = (config.supabaseAnonKey || SUPABASE_ANON_KEY || '').trim();
+  const url = normalizeSupabaseUrl(config.supabaseUrl || SUPABASE_URL || '');
+  const key = normalizeSupabaseKey(config.supabaseAnonKey || SUPABASE_ANON_KEY || '');
 
   if (!url || !key) {
     return null;
@@ -92,7 +161,13 @@ export const getSupabaseClient = (): any => {
     lastUsedUrl = url;
     lastUsedKey = key;
     try {
-      cachedClient = createClient(url, key);
+      cachedClient = createClient(url, key, {
+        auth: {
+          persistSession: false,
+          autoRefreshToken: false,
+          detectSessionInUrl: false
+        }
+      });
     } catch (e) {
       console.error("Failed to initialize Supabase client:", e);
       return null;
@@ -102,199 +177,270 @@ export const getSupabaseClient = (): any => {
   return cachedClient;
 };
 
-// Dynamic proxy so existing code calling `supabase` uses the active credentials
-export const supabase = new Proxy({} as any, {
-  get: (_target, prop) => {
-    const client = getSupabaseClient();
-    if (!client) {
-      throw new Error("Supabase is not configured. Please enter your Supabase URL and Anon Key in Settings.");
-    }
-    return (client as any)[prop];
-  }
-});
-
+/**
+ * Robust test for Supabase connection.
+ * Strips any accidental /rest/v1 suffix before testing.
+ */
 export const testSupabaseConnection = async (
-  url: string, 
-  key: string
-): Promise<{ success: boolean; message: string }> => {
-  const cleanUrl = url.trim().replace(/\/$/, '');
-  const cleanKey = key.trim();
+  rawUrl: string, 
+  rawKey: string
+): Promise<{ success: boolean; message: string; tableReady?: boolean }> => {
+  const cleanUrl = normalizeSupabaseUrl(rawUrl);
+  const cleanKey = normalizeSupabaseKey(rawKey);
 
   if (!cleanUrl || !cleanKey) {
     return { success: false, message: "Both Supabase Project URL and Anon Key are required." };
   }
 
+  // 1. Verify Gateway & API Key against Auth Settings endpoint
   try {
-    const res = await fetch(`${cleanUrl}/rest/v1/`, {
+    const authRes = await fetch(`${cleanUrl}/auth/v1/settings`, {
       method: 'GET',
       headers: {
-        apikey: cleanKey,
-        Authorization: `Bearer ${cleanKey}`
+        apikey: cleanKey
       }
     });
 
-    if (res.ok) {
-      return { success: true, message: "Connected to Supabase successfully!" };
+    if (authRes.status === 401) {
+      return {
+        success: false,
+        message: "HTTP 401 Unauthorized: The Anon Key is invalid or expired. Check Supabase Dashboard -> Project Settings -> API -> anon (public) key."
+      };
     }
-
-    return {
-      success: false,
-      message: `Supabase responded with HTTP ${res.status} (${res.statusText}). Check your Anon Key.`
-    };
   } catch (err: any) {
-    console.error("Supabase connection test failed:", err);
-    return {
-      success: false,
-      message: "ERR_NAME_NOT_RESOLVED: Domain not found. Your Supabase project is likely PAUSED due to inactivity, or the URL has a typo. Unpause it at supabase.com/dashboard."
-    };
+    if (err.message?.includes('Failed to fetch') || err.message?.includes('NetworkError') || err.name === 'TypeError') {
+      return {
+        success: false,
+        message: "Network Error: Could not reach Supabase domain. Your project may be PAUSED. Check supabase.com/dashboard."
+      };
+    }
   }
-};
 
-export const uploadImageToSupabase = async (file: File): Promise<string | null> => {
+  // 2. Test PostgREST table access using the official Supabase Client
   try {
-    const client = getSupabaseClient();
-    if (!client) return null;
+    const client = createClient(cleanUrl, cleanKey, {
+      auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
+    });
 
-    const fileExt = file.name.split('.').pop() || 'jpg';
-    const fileName = `${Math.random().toString(36).substring(2)}-${Date.now()}.${fileExt}`;
-    const filePath = `public/${fileName}`;
+    const { error } = await client.from('inventory_scans').select('id').limit(1);
 
-    // Add 3s timeout so stalled network fails immediately to base64
-    const uploadPromise = client.storage.from('scans').upload(filePath, file);
-    const timeoutPromise = new Promise<{ error: any }>((resolve) =>
-      setTimeout(() => resolve({ error: new Error('Upload timeout') }), 3000)
-    );
-
-    const { error } = await Promise.race([uploadPromise, timeoutPromise]);
-    
     if (error) {
-      console.warn('Supabase storage upload failed or timed out:', error.message || error);
-      return null;
+      // Code 42P01 / PGRST205 means table doesn't exist yet, but credentials ARE 100% valid!
+      if (
+        error.code === '42P01' || 
+        error.code === 'PGRST205' ||
+        error.message?.includes('does not exist') ||
+        error.message?.includes('relation "public.inventory_scans"')
+      ) {
+        return {
+          success: true,
+          tableReady: false,
+          message: "✓ Credentials Valid & Connected! But table 'inventory_scans' is missing. Please run the SQL Script in your Supabase SQL Editor."
+        };
+      }
+
+      if (error.code === 'PGRST301' || (error as any).status === 401 || error.message?.includes('JWT')) {
+        return {
+          success: false,
+          message: `HTTP 401 (${error.message || 'Invalid API Key'}). Please ensure you copied the 'anon' key, not the service_role key.`
+        };
+      }
+
+      return {
+        success: false,
+        message: `Supabase Error: ${error.message} (Code: ${error.code})`
+      };
     }
-    
-    const { data: publicUrlData } = client.storage.from('scans').getPublicUrl(filePath);
-    return publicUrlData.publicUrl;
+
+    // 3. Test Storage 'scans' bucket
+    let storageStatus = '';
+    try {
+      const { error: storageErr } = await client.storage.from('scans').list('', { limit: 1 });
+      if (storageErr) {
+        if (storageErr.message?.toLowerCase().includes('not found') || (storageErr as any).status === 404) {
+          storageStatus = " (Storage bucket 'scans' missing. Run SQL script.)";
+        } else if (storageErr.message?.toLowerCase().includes('row-level security') || storageErr.message?.toLowerCase().includes('policy')) {
+          storageStatus = " (Storage bucket 'scans' needs RLS policy. Run SQL script.)";
+        }
+      }
+    } catch {}
+
+    return {
+      success: true,
+      tableReady: true,
+      message: `✓ Connected to Supabase Database & 'inventory_scans' table successfully!${storageStatus}`
+    };
   } catch (err: any) {
-    console.warn('Supabase storage upload exception:', err.message || err);
-    return null;
+    console.error("Supabase test exception:", err);
+    return {
+      success: false,
+      message: err.message || "Failed to connect to Supabase."
+    };
   }
 };
 
-export const syncDocumentToSupabase = async (doc: DocumentRecord): Promise<boolean> => {
+/**
+ * Uploads captured photo directly into Supabase Storage 'scans' bucket.
+ * Returns public URL of the uploaded image.
+ */
+export const uploadImageToSupabase = async (file: File): Promise<string> => {
   const client = getSupabaseClient();
   if (!client) {
-    throw new Error("Supabase is not configured.");
+    throw new Error("Supabase is not configured. Please enter your Supabase URL & Key in Settings.");
   }
 
-  // 1. Upsert Scan Record
-  const { error: scanError } = await client
+  const fileExt = file.name.split('.').pop() || 'jpg';
+  const fileName = `${Date.now()}_${Math.random().toString(36).substring(2, 9)}.${fileExt}`;
+
+  // Upload to Supabase Storage 'scans' bucket
+  let { error: uploadError } = await client.storage
+    .from('scans')
+    .upload(fileName, file, {
+      contentType: file.type || 'image/jpeg',
+      upsert: true
+    });
+
+  // If bucket does not exist, attempt to auto-create and retry
+  if (uploadError && (uploadError.message?.toLowerCase().includes('bucket not found') || (uploadError as any).status === 404)) {
+    try {
+      await client.storage.createBucket('scans', { public: true });
+      const retry = await client.storage.from('scans').upload(fileName, file, {
+        contentType: file.type || 'image/jpeg',
+        upsert: true
+      });
+      uploadError = retry.error;
+    } catch {}
+  }
+
+  if (uploadError) {
+    console.error('Supabase storage upload error:', uploadError);
+    const msg = uploadError.message || '';
+    if (msg.toLowerCase().includes('row-level security') || msg.toLowerCase().includes('policy')) {
+      throw new Error(`Storage RLS Policy Error: Supabase blocked the upload. Please copy the SQL script from Settings and run it in your Supabase SQL Editor.`);
+    }
+    throw new Error(`Supabase Storage Error: ${msg || 'Upload failed'}`);
+  }
+
+  const { data: publicUrlData } = client.storage.from('scans').getPublicUrl(fileName);
+  return publicUrlData.publicUrl;
+};
+
+/**
+ * Saves a document record directly to the Supabase Database 'inventory_scans' table.
+ */
+export const saveDocumentToSupabase = async (doc: DocumentRecord): Promise<DocumentRecord> => {
+  const client = getSupabaseClient();
+  if (!client) {
+    throw new Error("Supabase is not configured. Please enter your Supabase credentials in Settings.");
+  }
+
+  const { error } = await client
     .from('inventory_scans')
     .upsert({
       id: doc.id,
       title: doc.title,
       document_date: doc.document_date,
       image_url: doc.image_url,
-      status: doc.status,
+      status: doc.status || 'verified',
       raw_text: doc.raw_text,
       created_at: doc.created_at,
       updated_at: doc.updated_at
     });
 
-  if (scanError) {
-    console.error('Supabase Sync Error (Scans):', scanError);
-    throw new Error(scanError.message);
+  if (error) {
+    console.error('Supabase Database Sync Error:', error);
+    throw new Error(`Supabase DB Error: ${error.message}`);
   }
 
-  // 2. Delete existing items for this scan to replace them
-  await client.from('inventory_items').delete().eq('scan_id', doc.id);
+  return { ...doc, synced_to_supabase: true };
+};
 
-  // 3. Insert new items
-  if (doc.items.length > 0) {
-    const itemsToInsert = doc.items.map(item => ({
-      id: item.id,
-      scan_id: doc.id,
-      item_name: item.item_name,
-      quantity: item.quantity
-    }));
+/**
+ * Loads all scans directly from Supabase Database.
+ */
+export const fetchDocumentsFromSupabase = async (): Promise<DocumentRecord[]> => {
+  const client = getSupabaseClient();
+  if (!client) return [];
 
-    const { error: itemsError } = await client
-      .from('inventory_items')
-      .insert(itemsToInsert);
-      
-    if (itemsError) {
-      console.error('Supabase Sync Error (Items):', itemsError);
-      throw new Error(itemsError.message);
+  const { data: scans, error } = await client
+    .from('inventory_scans')
+    .select('*')
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('Supabase Fetch Error:', error);
+    throw new Error(`Supabase Fetch Error: ${error.message}`);
+  }
+
+  return (scans || []).map((scan: any) => {
+    let imgUrl = scan.image_url || '';
+    // Strip expired cross-origin blob URLs from previous test runs
+    if (imgUrl.startsWith('blob:')) {
+      imgUrl = '';
     }
+    return {
+      id: scan.id,
+      title: scan.title || 'Untitled Document',
+      document_date: scan.document_date || new Date(scan.created_at || Date.now()).toISOString().split('T')[0],
+      image_url: imgUrl,
+      status: scan.status || 'verified',
+      raw_text: scan.raw_text || '',
+      items: [],
+      created_at: scan.created_at || new Date().toISOString(),
+      updated_at: scan.updated_at || new Date().toISOString(),
+      synced_to_supabase: true
+    };
+  });
+};
+
+/**
+ * Deletes document directly from Supabase database and removes image from storage.
+ */
+export const deleteDocumentFromSupabase = async (id: string, imageUrl?: string): Promise<boolean> => {
+  const client = getSupabaseClient();
+  if (!client) return false;
+
+  const { error } = await client.from('inventory_scans').delete().eq('id', id);
+  if (error) {
+    console.error('Supabase Delete Error:', error);
+    throw new Error(`Failed to delete scan: ${error.message}`);
+  }
+
+  // Remove image file from storage bucket if it exists and is a valid cloud storage URL
+  if (imageUrl && !imageUrl.startsWith('blob:') && !imageUrl.startsWith('data:')) {
+    try {
+      const parts = imageUrl.split('/');
+      const fileName = parts[parts.length - 1]?.split('?')[0];
+      if (fileName) {
+        await client.storage.from('scans').remove([fileName]);
+      }
+    } catch {}
   }
 
   return true;
 };
 
-export const fetchDocumentsFromSupabase = async (): Promise<DocumentRecord[] | null> => {
-  try {
-    const client = getSupabaseClient();
-    if (!client) return null;
+/**
+ * Updates document details directly in Supabase.
+ */
+export const updateDocumentInSupabase = async (doc: DocumentRecord): Promise<boolean> => {
+  const client = getSupabaseClient();
+  if (!client) return false;
 
-    const { data: scans, error: scansError } = await client
-      .from('inventory_scans')
-      .select('*')
-      .order('created_at', { ascending: false });
+  const { error } = await client
+    .from('inventory_scans')
+    .update({
+      title: doc.title,
+      document_date: doc.document_date,
+      raw_text: doc.raw_text,
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', doc.id);
 
-    if (scansError) {
-      console.warn('Supabase Fetch Error (Scans):', scansError.message || scansError);
-      return null;
-    }
-
-    const { data: items, error: itemsError } = await client
-      .from('inventory_items')
-      .select('*');
-
-    if (itemsError) {
-      console.warn('Supabase Fetch Error (Items):', itemsError.message || itemsError);
-      return null;
-    }
-
-    const completeDocs: DocumentRecord[] = (scans || []).map((scan: any) => {
-      const scanItems = (items || []).filter((i: any) => i.scan_id === scan.id).map((i: any) => ({
-        id: i.id,
-        item_name: i.item_name,
-        quantity: i.quantity
-      }));
-
-      return {
-        id: scan.id,
-        title: scan.title,
-        document_date: scan.document_date,
-        image_url: scan.image_url,
-        status: scan.status as any,
-        raw_text: scan.raw_text,
-        items: scanItems,
-        created_at: scan.created_at,
-        updated_at: scan.updated_at,
-        synced_to_supabase: true
-      };
-    });
-
-    return completeDocs;
-  } catch (err: any) {
-    console.warn('Supabase fetch exception (network/paused/DNS):', err.message || err);
-    return null;
+  if (error) {
+    console.error('Supabase Update Error:', error);
+    throw new Error(`Failed to update scan: ${error.message}`);
   }
-};
 
-export const deleteDocumentFromSupabase = async (id: string): Promise<boolean> => {
-  try {
-    const client = getSupabaseClient();
-    if (!client) return false;
-
-    const { error } = await client.from('inventory_scans').delete().eq('id', id);
-    if (error) {
-      console.error('Supabase Delete Error:', error);
-      return false;
-    }
-    return true;
-  } catch (err: any) {
-    console.warn('Supabase delete exception:', err.message || err);
-    return false;
-  }
+  return true;
 };

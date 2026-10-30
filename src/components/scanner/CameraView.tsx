@@ -187,8 +187,10 @@ export const CameraView: React.FC<CameraViewProps> = ({
       const title = `Auto Scan #${sessionCount} (${timeStr})`;
       setSessionCount(c => c + 1);
       showToast(`⚡ ${title} సేవ్ అవుతోంది...`);
-      await onCapture(file, title, 'auto');
-      showToast(`✓ ${title} డేటాబేస్ లో సేవ్ అయింది!`);
+      const success = await onCapture(file, title, 'auto');
+      if (success !== false) {
+        showToast(`✓ ${title} డేటాబేస్ లో సేవ్ అయింది!`);
+      }
     } else {
       // Manual Mode:
       // If user previously selected an existing name and locked it for continuous auto-save:
@@ -198,8 +200,10 @@ export const CameraView: React.FC<CameraViewProps> = ({
         const title = `${activeContinuousName} (${nextCount})`;
         setSessionCount(c => c + 1);
         showToast(`⚡ "${title}" డైరెక్ట్ గా సేవ్ అవుతోంది...`);
-        await onCapture(file, title, 'manual');
-        showToast(`✓ "${title}" డేటాబేస్ లో సేవ్ అయింది!`);
+        const success = await onCapture(file, title, 'manual');
+        if (success !== false) {
+          showToast(`✓ "${title}" డేటాబేస్ లో సేవ్ అయింది!`);
+        }
       } else {
         // Otherwise, pause timer and open popup to choose/type name
         const defaultTitle = `Doc Scan #${sessionCount} (${timeStr})`;
@@ -257,16 +261,18 @@ export const CameraView: React.FC<CameraViewProps> = ({
         onSaveNewName(finalTitle);
       }
 
-      await onCapture(pendingCapture.file, finalTitle, 'manual');
-      setSessionCount(c => c + 1);
+      const success = await onCapture(pendingCapture.file, finalTitle, 'manual');
+      if (success !== false) {
+        setSessionCount(c => c + 1);
 
-      // If user selected to lock this name, future scans in this session will auto-save without popup
-      if (lockNameForUpcoming) {
-        setActiveContinuousName(finalTitle);
-        setContinuousCount(1);
-        showToast(`✓ "${finalTitle}" సేవ్ అయింది. ఇకపై ఇదే పేరుతో ఆటోమేటిక్ గా సేవ్ అవుతుంది!`);
-      } else {
-        showToast(`✓ "${finalTitle}" డేటాబేస్ లో సేవ్ అయింది!`);
+        // If user selected to lock this name, future scans in this session will auto-save without popup
+        if (lockNameForUpcoming) {
+          setActiveContinuousName(finalTitle);
+          setContinuousCount(1);
+          showToast(`✓ "${finalTitle}" సేవ్ అయింది. ఇకపై ఇదే పేరుతో ఆటోమేటిక్ గా సేవ్ అవుతుంది!`);
+        } else {
+          showToast(`✓ "${finalTitle}" డేటాబేస్ లో సేవ్ అయింది!`);
+        }
       }
     } finally {
       URL.revokeObjectURL(pendingCapture.previewUrl);

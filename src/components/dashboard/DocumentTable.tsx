@@ -1,12 +1,12 @@
 import { useState } from 'react';
 import type { DocumentRecord } from '../../types/document';
-import { Search, Eye, Trash2, Cloud, HardDrive, Edit2, Image as ImageIcon } from 'lucide-react';
+import { Search, Eye, Trash2, Cloud, Edit2, Image as ImageIcon } from 'lucide-react';
 
 interface DocumentTableProps {
   documents: DocumentRecord[];
   onView: (doc: DocumentRecord) => void;
   onEdit: (doc: DocumentRecord) => void;
-  onDelete: (id: string) => void;
+  onDelete: (id: string, imageUrl?: string) => void;
 }
 
 export const DocumentTable = ({ documents, onView, onEdit, onDelete }: DocumentTableProps) => {
@@ -28,9 +28,9 @@ export const DocumentTable = ({ documents, onView, onEdit, onDelete }: DocumentT
         gap: '1rem'
       }}>
         <div>
-          <h3 style={{ margin: '0 0 0.25rem 0', fontSize: '1.2rem' }}>Captured Scans Database</h3>
+          <h3 style={{ margin: '0 0 0.25rem 0', fontSize: '1.2rem' }}>Supabase Cloud Database Scans</h3>
           <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-            డేటాబేస్ లో సేవ్ అయిన అన్ని స్నాప్‌షాట్‌లు మరియు డాక్యుమెంట్లు ({documents.length})
+            సుపబాస్ డేటాబేస్ & స్టోరేజ్ లో సేవ్ అయిన అన్ని స్నాప్‌షాట్‌లు ({documents.length})
           </p>
         </div>
         <div style={{ position: 'relative', width: '260px' }}>
@@ -53,7 +53,7 @@ export const DocumentTable = ({ documents, onView, onEdit, onDelete }: DocumentT
               <th style={{ padding: '0.9rem 1.25rem', color: 'var(--text-muted)', fontWeight: 500, width: '70px' }}>Photo</th>
               <th style={{ padding: '0.9rem 1.25rem', color: 'var(--text-muted)', fontWeight: 500 }}>Document Title</th>
               <th style={{ padding: '0.9rem 1.25rem', color: 'var(--text-muted)', fontWeight: 500 }}>Date & Time</th>
-              <th style={{ padding: '0.9rem 1.25rem', color: 'var(--text-muted)', fontWeight: 500 }}>Database Status</th>
+              <th style={{ padding: '0.9rem 1.25rem', color: 'var(--text-muted)', fontWeight: 500 }}>Storage Location</th>
               <th style={{ padding: '0.9rem 1.25rem', color: 'var(--text-muted)', fontWeight: 500, textAlign: 'right' }}>Actions</th>
             </tr>
           </thead>
@@ -62,9 +62,9 @@ export const DocumentTable = ({ documents, onView, onEdit, onDelete }: DocumentT
               <tr>
                 <td colSpan={5} style={{ padding: '3.5rem', textAlign: 'center', color: 'var(--text-muted)' }}>
                   <ImageIcon size={40} style={{ opacity: 0.3, marginBottom: '0.75rem', display: 'block', margin: '0 auto' }} />
-                  <p style={{ margin: 0, fontSize: '0.95rem' }}>No scans captured yet.</p>
+                  <p style={{ margin: 0, fontSize: '0.95rem' }}>No scans in Supabase yet.</p>
                   <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                    Start the camera to take automatic or manual 5-second snapshots!
+                    Start the camera to take automatic or manual snapshots and save directly to Supabase!
                   </span>
                 </td>
               </tr>
@@ -88,10 +88,13 @@ export const DocumentTable = ({ documents, onView, onEdit, onDelete }: DocumentT
                         justifyContent: 'center'
                       }}
                     >
-                      {doc.image_url ? (
+                      {doc.image_url && !doc.image_url.startsWith('blob:') ? (
                         <img
                           src={doc.image_url}
                           alt={doc.title}
+                          onError={(e) => {
+                            (e.target as HTMLElement).style.display = 'none';
+                          }}
                           style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                         />
                       ) : (
@@ -118,37 +121,21 @@ export const DocumentTable = ({ documents, onView, onEdit, onDelete }: DocumentT
                     </div>
                   </td>
 
-                  {/* Sync Status */}
+                  {/* Supabase Storage Status */}
                   <td style={{ padding: '0.75rem 1.25rem' }}>
-                    {doc.synced_to_supabase ? (
-                      <span style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '0.4rem',
-                        background: 'rgba(16, 185, 129, 0.15)',
-                        color: 'var(--success-color)',
-                        padding: '0.25rem 0.65rem',
-                        borderRadius: '20px',
-                        fontSize: '0.8rem',
-                        fontWeight: 500
-                      }}>
-                        <Cloud size={14} /> Cloud DB Synced
-                      </span>
-                    ) : (
-                      <span style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '0.4rem',
-                        background: 'rgba(245, 158, 11, 0.15)',
-                        color: 'var(--warning-color)',
-                        padding: '0.25rem 0.65rem',
-                        borderRadius: '20px',
-                        fontSize: '0.8rem',
-                        fontWeight: 500
-                      }}>
-                        <HardDrive size={14} /> Local Storage
-                      </span>
-                    )}
+                    <span style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.4rem',
+                      background: 'rgba(16, 185, 129, 0.15)',
+                      color: 'var(--success-color)',
+                      padding: '0.3rem 0.75rem',
+                      borderRadius: '20px',
+                      fontSize: '0.8rem',
+                      fontWeight: 600
+                    }}>
+                      <Cloud size={14} /> Supabase Cloud DB
+                    </span>
                   </td>
 
                   {/* Actions */}
@@ -188,11 +175,11 @@ export const DocumentTable = ({ documents, onView, onEdit, onDelete }: DocumentT
                       </button>
                       <button
                         onClick={() => {
-                          if (window.confirm(`Are you sure you want to delete "${doc.title}"?`)) {
-                            onDelete(doc.id);
+                          if (window.confirm(`Are you sure you want to delete "${doc.title}" from Supabase?`)) {
+                            onDelete(doc.id, doc.image_url);
                           }
                         }}
-                        title="Delete"
+                        title="Delete from Supabase"
                         style={{
                           background: 'rgba(239, 68, 68, 0.15)',
                           border: 'none',

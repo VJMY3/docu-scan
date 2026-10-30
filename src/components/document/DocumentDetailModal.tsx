@@ -109,10 +109,13 @@ export const DocumentDetailModal = ({ document, onClose, onEdit }: DocumentDetai
           padding: '1.5rem',
           overflow: 'auto'
         }}>
-          {document.image_url ? (
+          {document.image_url && !document.image_url.startsWith('blob:') ? (
             <img
               src={document.image_url}
               alt={document.title}
+              onError={(e) => {
+                (e.target as HTMLElement).style.display = 'none';
+              }}
               style={{
                 maxWidth: '100%',
                 maxHeight: '65vh',
@@ -122,7 +125,7 @@ export const DocumentDetailModal = ({ document, onClose, onEdit }: DocumentDetai
               }}
             />
           ) : (
-            <div style={{ color: 'var(--text-muted)' }}>No image file found.</div>
+            <div style={{ color: 'var(--text-muted)' }}>No image file found or expired preview.</div>
           )}
         </div>
 
