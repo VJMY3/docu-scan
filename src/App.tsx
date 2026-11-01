@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { CameraView, type ScannerMode } from './components/scanner/CameraView';
-import { ModeSelectModal, SHUTTER_SPEED_OPTIONS } from './components/scanner/ModeSelectModal';
+import { ModeSelectModal } from './components/scanner/ModeSelectModal';
 import { FileUploader } from './components/scanner/FileUploader';
 import { SettingsModal } from './components/settings/SettingsModal';
 import { LockScreen } from './components/settings/LockScreen';
@@ -18,7 +18,7 @@ import {
 } from './services/storageService';
 import { uploadImageToSupabase } from './services/supabaseClient';
 import type { DocumentRecord, DashboardStats } from './types/document';
-import { Camera, ShieldCheck, Settings, Menu, RefreshCw, Lock, Zap, Edit3, Clock, AlertTriangle } from 'lucide-react';
+import { Camera, ShieldCheck, Settings, Menu, RefreshCw, Lock, Zap, Edit3, AlertTriangle } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 function App() {
@@ -32,16 +32,6 @@ function App() {
   // Modal and View states
   const [showModeModal, setShowModeModal] = useState(false);
   const [cameraMode, setCameraMode] = useState<ScannerMode>('auto');
-
-  // Shutter Speed (persisted in localStorage, configured directly on Dashboard)
-  const [shutterSpeed, setShutterSpeed] = useState<number>(() => {
-    try {
-      const saved = localStorage.getItem('docuscan_shutter_speed');
-      return saved ? Number(saved) : 5;
-    } catch {
-      return 5;
-    }
-  });
 
   // Saved document names for dropdown selection
   const [savedNames, setSavedNames] = useState<string[]>(() => getSavedDocumentNames());
@@ -88,16 +78,6 @@ function App() {
     setShowModeModal(false);
   };
 
-  // Speed change helper (configured directly on Dashboard before opening camera)
-  const handleSpeedChange = (newSpeed: number) => {
-    setShutterSpeed(newSpeed);
-    try {
-      localStorage.setItem('docuscan_shutter_speed', String(newSpeed));
-    } catch (e) {
-      console.warn("Could not save shutter speed to storage:", e);
-    }
-  };
-
   // Register newly entered name in saved names list
   const handleSaveNewName = (name: string) => {
     const updated = addSavedDocumentName(name);
@@ -105,9 +85,8 @@ function App() {
   };
 
   // Handler for mode selection (Auto or Manual)
-  const handleSelectMode = (mode: ScannerMode, speed: number = shutterSpeed) => {
+  const handleSelectMode = (mode: ScannerMode) => {
     setCameraMode(mode);
-    handleSpeedChange(speed);
     setShowModeModal(false);
     setShowCamera(true);
   };
@@ -127,8 +106,8 @@ function App() {
         image_url: uploadedUrl,
         status: 'verified',
         raw_text: mode === 'auto'
-          ? `Automatic ${shutterSpeed}-Second Interval Capture`
-          : `Manual Mode (${shutterSpeed}s) Capture`,
+          ? `Automatic Mode Capture`
+          : `Manual Mode Capture`,
         items: [],
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
@@ -238,7 +217,7 @@ function App() {
           </button>
 
           <button
-            onClick={() => handleSelectMode('auto', shutterSpeed)}
+            onClick={() => handleSelectMode('auto')}
             className="btn"
             style={{
               justifyContent: 'flex-start',
@@ -250,22 +229,6 @@ function App() {
             <Camera size={18} color="#818cf8" /> Start Camera
           </button>
         </nav>
-
-        {/* Shutter Speed Quick Indicator in Sidebar */}
-        <div style={{
-          padding: '0.85rem',
-          borderRadius: '12px',
-          background: 'rgba(255, 255, 255, 0.04)',
-          border: '1px solid rgba(255, 255, 255, 0.08)',
-          marginBottom: '1rem'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#a5b4fc', fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.35rem' }}>
-            <Clock size={14} /> Shutter Speed
-          </div>
-          <div style={{ fontSize: '0.95rem', color: '#fff', fontWeight: 700 }}>
-            {shutterSpeed} Seconds
-          </div>
-        </div>
 
         <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
           <button
@@ -291,7 +254,7 @@ function App() {
           <div>
             <h1 style={{ margin: '0 0 0.5rem 0', fontSize: '2rem' }}>Dashboard Overview</h1>
             <p style={{ margin: 0, color: 'var(--text-muted)' }}>
-              100% Supabase Cloud Database & Storage (No Local Storage) • {shutterSpeed}s Interval
+              100% Supabase Cloud Database & Storage (No Local Storage) • Direct Cloud Capture
             </p>
           </div>
           <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
@@ -305,14 +268,14 @@ function App() {
               <RefreshCw size={18} className={isRefreshing ? 'animate-pulse' : ''} />
             </button>
             <button
-              onClick={() => handleSelectMode('auto', shutterSpeed)}
+              onClick={() => handleSelectMode('auto')}
               className="btn btn-primary"
               style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.65rem 1.15rem' }}
             >
-              <Zap size={18} /> Auto Camera ({shutterSpeed}s)
+              <Zap size={18} /> Launch Automatic Mode
             </button>
             <button
-              onClick={() => handleSelectMode('manual', shutterSpeed)}
+              onClick={() => handleSelectMode('manual')}
               className="btn"
               style={{
                 display: 'flex',
@@ -324,7 +287,7 @@ function App() {
                 color: '#6ee7b7'
               }}
             >
-              <Edit3 size={18} /> Manual Camera
+              <Edit3 size={18} /> Launch Manual Mode
             </button>
           </div>
         </header>
@@ -360,87 +323,6 @@ function App() {
           </div>
         )}
 
-        {/* 🌟 Prominent Shutter Speed Control Bar on Dashboard (Configured BEFORE opening camera) */}
-        <div className="glass-panel" style={{
-          padding: '1.25rem 1.75rem',
-          marginBottom: '1.75rem',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          flexWrap: 'wrap',
-          gap: '1.25rem',
-          borderRadius: '18px',
-          background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.15), rgba(15, 23, 42, 0.85))',
-          border: '1.5px solid rgba(99, 102, 241, 0.45)',
-          boxShadow: '0 10px 30px rgba(0, 0, 0, 0.3)'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-            <div style={{
-              background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-              padding: '0.75rem',
-              borderRadius: '14px',
-              color: 'white',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              boxShadow: '0 4px 15px rgba(99, 102, 241, 0.4)'
-            }}>
-              <Clock size={24} />
-            </div>
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <strong style={{ fontSize: '1.1rem', color: '#fff' }}>
-                  షట్టర్ స్పీడ్ సెట్టింగ్ (Pre-Camera Shutter Speed)
-                </strong>
-                <span style={{
-                  background: 'rgba(99, 102, 241, 0.25)',
-                  color: '#a5b4fc',
-                  padding: '2px 8px',
-                  borderRadius: '12px',
-                  fontSize: '0.75rem',
-                  fontWeight: 600
-                }}>
-                  Active: {shutterSpeed}s
-                </span>
-              </div>
-              <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                కెమెరా ఓపెన్ చేయకముందే ఇక్కడ షట్టర్ స్పీడ్ మార్చుకోవచ్చు (2 సెకన్ల నుండి 1 నిమిషం వరకు)
-              </span>
-            </div>
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            <label style={{ fontSize: '0.9rem', color: '#cbd5e1', fontWeight: 600 }}>
-              సమయం ఎంచుకోండి:
-            </label>
-            <select
-              value={shutterSpeed}
-              onChange={(e) => handleSpeedChange(Number(e.target.value))}
-              className="input-field"
-              style={{
-                width: 'auto',
-                minWidth: '220px',
-                padding: '0.65rem 1.1rem',
-                borderRadius: '12px',
-                fontSize: '0.95rem',
-                fontWeight: 700,
-                background: '#1e293b',
-                color: '#fff',
-                border: '2px solid #6366f1',
-                boxShadow: '0 0 16px rgba(99, 102, 241, 0.35)',
-                cursor: 'pointer',
-                margin: 0
-              }}
-            >
-              {SHUTTER_SPEED_OPTIONS.map(opt => (
-                <option key={opt.value} value={opt.value}>
-                  ⏱️ {opt.label}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
         {/* Quick Launch Cards for Automatic and Manual Modes */}
         <div style={{
           display: 'grid',
@@ -449,7 +331,7 @@ function App() {
           marginBottom: '2rem'
         }}>
           <div
-            onClick={() => handleSelectMode('auto', shutterSpeed)}
+            onClick={() => handleSelectMode('auto')}
             style={{
               padding: '1.5rem',
               borderRadius: '16px',
@@ -479,16 +361,16 @@ function App() {
             </div>
             <div>
               <h3 style={{ margin: '0 0 0.25rem 0', fontSize: '1.1rem', color: '#fff' }}>
-                Launch Automatic Mode ({shutterSpeed}s)
+                Launch Automatic Mode
               </h3>
               <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.82rem' }}>
-                షట్టర్ అవసరం లేకుండా ప్రతి {shutterSpeed} సెకన్లకు సుపబాస్ లో సేవ్ అవుతుంది
+                Space, Enter లేదా బటన్ క్లిక్ చేసి వెంటనే సేవ్ చేయండి (నో పాప్-అప్స్, నో టైమర్)
               </p>
             </div>
           </div>
 
           <div
-            onClick={() => handleSelectMode('manual', shutterSpeed)}
+            onClick={() => handleSelectMode('manual')}
             style={{
               padding: '1.5rem',
               borderRadius: '16px',
@@ -518,10 +400,10 @@ function App() {
             </div>
             <div>
               <h3 style={{ margin: '0 0 0.25rem 0', fontSize: '1.1rem', color: '#fff' }}>
-                Launch Manual Mode ({shutterSpeed}s)
+                Launch Manual Mode
               </h3>
               <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.82rem' }}>
-                సేవ్ చేసిన పేర్ల డ్రాప్‌డౌన్ లేదా ప్రతి {shutterSpeed} సెకన్ల స్నాప్
+                Space, Enter లేదా బటన్ క్లిక్ చేసి డాక్యుమెంట్ పేరు లేదా డ్రాప్‌డౌన్ తో సేవ్ చేయండి
               </p>
             </div>
           </div>
@@ -545,10 +427,9 @@ function App() {
         />
       </div>
 
-      {/* Mode Selection Modal (Shown right after PIN Unlock or on 'Start Camera') */}
+      {/* Mode Selection Modal */}
       {showModeModal && (
         <ModeSelectModal
-          initialSpeed={shutterSpeed}
           onSelectMode={handleSelectMode}
           onGoToDashboard={() => setShowModeModal(false)}
         />
@@ -564,7 +445,6 @@ function App() {
           <div style={{ width: '100%', maxWidth: '900px' }}>
             <CameraView
               initialMode={cameraMode}
-              shutterSpeed={shutterSpeed}
               savedNames={savedNames}
               onSaveNewName={handleSaveNewName}
               onCapture={handleSaveCapturedSnapshot}

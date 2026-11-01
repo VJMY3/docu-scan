@@ -1,14 +1,13 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import {
-  RefreshCw, X, Zap, ZapOff, Play, Pause, Camera as CameraIcon,
-  Check, Trash2, Edit3, ShieldAlert, Tag, RotateCcw
+  RefreshCw, X, Zap, ZapOff, Camera as CameraIcon,
+  Check, Trash2, Edit3, ShieldAlert, Tag
 } from 'lucide-react';
 
 export type ScannerMode = 'auto' | 'manual';
 
 interface CameraViewProps {
   initialMode?: ScannerMode;
-  shutterSpeed?: number;
   savedNames?: string[];
   onSaveNewName?: (name: string) => void;
   onCapture: (file: File, title: string, mode: ScannerMode) => Promise<boolean | void>;
@@ -24,7 +23,6 @@ interface PendingManualCapture {
 
 export const CameraView: React.FC<CameraViewProps> = ({
   initialMode = 'auto',
-  shutterSpeed = 5,
   savedNames = [],
   onSaveNewName,
   onCapture,
@@ -37,11 +35,8 @@ export const CameraView: React.FC<CameraViewProps> = ({
   const [flashSupported, setFlashSupported] = useState(false);
   const [flashOn, setFlashOn] = useState(false);
 
-  // Mode and Timer state
+  // Mode state (No auto-timers or shutter speeds - User triggers on demand!)
   const [mode, setMode] = useState<ScannerMode>(initialMode);
-  const [intervalSeconds] = useState<number>(shutterSpeed);
-  const [isTimerPaused, setIsTimerPaused] = useState(false);
-  const [countdown, setCountdown] = useState<number>(shutterSpeed);
   const [sessionCount, setSessionCount] = useState<number>(1);
   const [recentThumbnails, setRecentThumbnails] = useState<string[]>([]);
   const [showFlash, setShowFlash] = useState(false);
@@ -193,10 +188,10 @@ export const CameraView: React.FC<CameraViewProps> = ({
       }
     } else {
       // Manual Mode:
-      // If user previously selected an existing name and locked it for continuous auto-save:
+      // If user selected an existing name from dropdown, NO NEED TO ASK! Save directly!
       if (activeContinuousName) {
-        const nextCount = continuousCount + 1;
-        setContinuousCount(nextCount);
+        const nextCount = continuousCount;
+        setContinuousCount(c => c + 1);
         const title = `${activeContinuousName} (${nextCount})`;
         setSessionCount(c => c + 1);
         showToast(`⚡ "${title}" డైరెక్ట్ గా సేవ్ అవుతోంది...`);
@@ -205,10 +200,10 @@ export const CameraView: React.FC<CameraViewProps> = ({
           showToast(`✓ "${title}" డేటాబేస్ లో సేవ్ అయింది!`);
         }
       } else {
-        // Otherwise, pause timer and open popup to choose/type name
-        const defaultTitle = `Doc Scan #${sessionCount} (${timeStr})`;
+        // If NOT selected from dropdown, ASK NAME EVERY TIME!
+        const defaultTitle = `Doc Scan #${sessionCount}`;
         setSelectedDropdownName('');
-        setManualTitleInput(defaultTitle);
+        setManualTitleInput('');
         setAutoApplyForFuture(false);
         setPendingCapture({
           file,
@@ -219,25 +214,40 @@ export const CameraView: React.FC<CameraViewProps> = ({
     }
   }, [activeContinuousName, captureFrame, continuousCount, mode, onCapture, playShutterSound, sessionCount]);
 
-  // Countdown timer loop dynamically based on intervalSeconds
+  // Keyboard shortcut listener: SPACE and ENTER trigger capture immediately!
   useEffect(() => {
-    // If modal is open (manual naming popup) or timer is paused or error, don't count down
-    if (pendingCapture !== null || isTimerPaused || cameraError) {
-      return;
-    }
-
-    const interval = setInterval(() => {
-      setCountdown((prev) => {
-        if (prev <= 1) {
-          triggerSnapshot();
-          return intervalSeconds;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // If popup modal is open
+      if (pendingCapture !== null) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          handleConfirmManualSave(autoApplyForFuture);
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          handleDiscardManualCapture();
         }
-        return prev - 1;
-      });
-    }, 1000);
+        return;
+      }
 
-    return () => clearInterval(interval);
-  }, [pendingCapture, isTimerPaused, triggerSnapshot, cameraError, intervalSeconds]);
+      // If user is currently typing in an input or select, do not trigger capture
+      const targetTag = (e.target as HTMLElement)?.tagName;
+      if (targetTag === 'INPUT' || targetTag === 'TEXTAREA' || targetTag === 'SELECT') {
+        if (e.key === 'Enter') {
+          (e.target as HTMLElement).blur();
+        }
+        return;
+      }
+
+      // Trigger capture on SPACE or ENTER key
+      if (e.code === 'Space' || e.key === ' ' || e.code === 'Enter' || e.key === 'Enter') {
+        e.preventDefault();
+        triggerSnapshot();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [pendingCapture, triggerSnapshot, autoApplyForFuture]);
 
   // Handle dropdown selection in popup
   const handleDropdownSelect = (name: string) => {
@@ -265,11 +275,11 @@ export const CameraView: React.FC<CameraViewProps> = ({
       if (success !== false) {
         setSessionCount(c => c + 1);
 
-        // If user selected to lock this name, future scans in this session will auto-save without popup
+        // If user selected to lock this name from dropdown / checkbox, future scans will auto-save without asking
         if (lockNameForUpcoming) {
           setActiveContinuousName(finalTitle);
-          setContinuousCount(1);
-          showToast(`✓ "${finalTitle}" సేవ్ అయింది. ఇకపై ఇదే పేరుతో ఆటోమేటిక్ గా సేవ్ అవుతుంది!`);
+          setContinuousCount(2);
+          showToast(`✓ "${finalTitle}" సేవ్ అయింది. ఇకపై డ్రాప్‌డౌన్ పేరుతో డైరెక్ట్ గా సేవ్ అవుతుంది!`);
         } else {
           showToast(`✓ "${finalTitle}" డేటాబేస్ లో సేవ్ అయింది!`);
         }
@@ -278,7 +288,6 @@ export const CameraView: React.FC<CameraViewProps> = ({
       URL.revokeObjectURL(pendingCapture.previewUrl);
       setPendingCapture(null);
       setManualSaving(false);
-      setCountdown(intervalSeconds); // Reset countdown
     }
   };
 
@@ -288,7 +297,6 @@ export const CameraView: React.FC<CameraViewProps> = ({
       URL.revokeObjectURL(pendingCapture.previewUrl);
     }
     setPendingCapture(null);
-    setCountdown(intervalSeconds); // Reset countdown
     showToast(`స్నాప్‌షాట్ రద్దు చేయబడింది`);
   };
 
@@ -433,10 +441,7 @@ export const CameraView: React.FC<CameraViewProps> = ({
             border: '1px solid rgba(255,255,255,0.15)'
           }}>
             <button
-              onClick={() => {
-                setMode('auto');
-                setCountdown(intervalSeconds);
-              }}
+              onClick={() => setMode('auto')}
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -455,10 +460,7 @@ export const CameraView: React.FC<CameraViewProps> = ({
               <Zap size={14} /> Auto
             </button>
             <button
-              onClick={() => {
-                setMode('manual');
-                setCountdown(intervalSeconds);
-              }}
+              onClick={() => setMode('manual')}
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -478,58 +480,103 @@ export const CameraView: React.FC<CameraViewProps> = ({
             </button>
           </div>
 
-          {/* Center: Fixed Speed Indicator (set on dashboard) & Active Continuous Name badge */}
+          {/* Center: Mode Indicator & Settings */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.4rem',
-              background: 'rgba(15, 23, 42, 0.75)',
-              backdropFilter: 'blur(10px)',
-              padding: '0.35rem 0.75rem',
-              borderRadius: '20px',
-              border: '1px solid rgba(99, 102, 241, 0.4)',
-              color: '#cbd5e1',
-              fontSize: '0.82rem',
-              fontWeight: 600
-            }}>
-              <span style={{ color: '#818cf8' }}>⏱️ {intervalSeconds}s Interval</span>
-            </div>
-
-            {/* Active Continuous Name Tag (if locked in manual mode) */}
-            {mode === 'manual' && activeContinuousName && (
+            {mode === 'auto' ? (
               <div style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: '0.5rem',
-                background: 'rgba(16, 185, 129, 0.25)',
-                border: '1.5px solid #10b981',
-                padding: '0.3rem 0.75rem',
+                gap: '0.4rem',
+                background: 'rgba(15, 23, 42, 0.75)',
+                backdropFilter: 'blur(10px)',
+                padding: '0.35rem 0.75rem',
                 borderRadius: '20px',
-                color: '#fff',
+                border: '1px solid rgba(99, 102, 241, 0.4)',
+                color: '#cbd5e1',
                 fontSize: '0.82rem',
                 fontWeight: 600
               }}>
-                <Tag size={13} color="#34d399" />
-                <span>పేరు: "{activeContinuousName}"</span>
-                <button
-                  onClick={handleResetContinuousName}
-                  title="Unlock name / ask name on next snap"
+                <span style={{ color: '#a5b4fc' }}>⚡ Automatic (Direct Save on Space / Enter / Click)</span>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                {/* Saved Names Dropdown */}
+                <select
+                  value={activeContinuousName || ''}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val) {
+                      setActiveContinuousName(val);
+                      setContinuousCount(1);
+                      showToast(`డ్రాప్‌డౌన్ నుండి "${val}" ఎంచుకున్నారు. ఇకపై అడగకుండా డైరెక్ట్ గా సేవ్ అవుతుంది!`);
+                    } else {
+                      setActiveContinuousName(null);
+                      showToast(`ప్రతిసారీ పేరు అడుగుతుంది`);
+                    }
+                  }}
                   style={{
-                    background: 'rgba(255,255,255,0.2)',
-                    border: 'none',
-                    borderRadius: '12px',
-                    color: '#fff',
-                    padding: '2px 6px',
-                    fontSize: '0.72rem',
+                    background: 'rgba(15, 23, 42, 0.9)',
+                    color: activeContinuousName ? '#6ee7b7' : '#cbd5e1',
+                    border: activeContinuousName ? '1.5px solid #10b981' : '1px solid rgba(255,255,255,0.25)',
+                    padding: '0.35rem 0.85rem',
+                    borderRadius: '16px',
+                    fontSize: '0.82rem',
+                    fontWeight: 600,
                     cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '2px'
+                    outline: 'none',
+                    boxShadow: activeContinuousName ? '0 0 12px rgba(16, 185, 129, 0.35)' : 'none'
                   }}
                 >
-                  <RotateCcw size={11} /> మార్చు
-                </button>
+                  <option value="">-- ప్రతిసారీ పేరు అడుగు (Ask name every time) --</option>
+                  {savedNames && savedNames.length > 0 && (
+                    <optgroup label="గతంలో వాడిన పేర్లు (Saved Names)">
+                      {savedNames.map((n, i) => (
+                        <option key={i} value={n}>🏷️ {n}</option>
+                      ))}
+                    </optgroup>
+                  )}
+                </select>
+
+                {/* Active Continuous Name Tag */}
+                {activeContinuousName ? (
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.4rem',
+                    background: 'rgba(16, 185, 129, 0.25)',
+                    border: '1.5px solid #10b981',
+                    padding: '0.3rem 0.75rem',
+                    borderRadius: '20px',
+                    color: '#fff',
+                    fontSize: '0.82rem',
+                    fontWeight: 600
+                  }}>
+                    <Tag size={13} color="#34d399" />
+                    <span>వాడుతున్న పేరు: "{activeContinuousName}"</span>
+                    <button
+                      onClick={handleResetContinuousName}
+                      title="Clear name / Ask every time"
+                      style={{
+                        background: 'rgba(255,255,255,0.2)',
+                        border: 'none',
+                        borderRadius: '12px',
+                        color: '#fff',
+                        padding: '2px 6px',
+                        fontSize: '0.72rem',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '2px'
+                      }}
+                    >
+                      <X size={11} /> క్లియర్
+                    </button>
+                  </div>
+                ) : (
+                  <span style={{ fontSize: '0.78rem', color: '#94a3b8' }}>
+                    💬 (Enter కొడితే పేరు అడుగుతుంది)
+                  </span>
+                )}
               </div>
             )}
           </div>
@@ -600,58 +647,7 @@ export const CameraView: React.FC<CameraViewProps> = ({
           </div>
         </div>
 
-        {/* Dynamic Countdown & Status Badge */}
-        <div style={{
-          position: 'absolute',
-          top: '4.75rem',
-          left: '50%',
-          transform: 'translateX(-50%)',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          gap: '0.4rem',
-          zIndex: 40,
-          pointerEvents: 'none'
-        }}>
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.75rem',
-            padding: '0.5rem 1.1rem',
-            borderRadius: '30px',
-            background: 'rgba(15, 23, 42, 0.85)',
-            backdropFilter: 'blur(10px)',
-            border: `1.5px solid ${mode === 'auto' ? '#6366f1' : '#10b981'}`,
-            boxShadow: '0 4px 16px rgba(0,0,0,0.4)'
-          }}>
-            {/* Visual timer countdown number */}
-            <div style={{
-              width: '30px',
-              height: '30px',
-              borderRadius: '50%',
-              background: mode === 'auto' ? '#6366f1' : '#10b981',
-              color: 'white',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontWeight: 800,
-              fontSize: '0.9rem',
-              animation: countdown <= 2 ? 'pulse 0.5s infinite' : 'none'
-            }}>
-              {countdown}s
-            </div>
 
-            <span style={{ color: '#fff', fontSize: '0.85rem', fontWeight: 600 }}>
-              {isTimerPaused
-                ? 'PAUSED'
-                : mode === 'auto'
-                  ? `Auto-capturing every ${intervalSeconds}s`
-                  : activeContinuousName
-                    ? `Auto-saving as "${activeContinuousName}" in ${countdown}s`
-                    : `Manual snap in ${countdown}s`}
-            </span>
-          </div>
-        </div>
 
         {/* Toast / Notification Banner */}
         {statusToast && (
@@ -717,63 +713,50 @@ export const CameraView: React.FC<CameraViewProps> = ({
           </span>
         </div>
 
-        {/* Center: Instant Shutter & Pause/Play */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
-          <button
-            onClick={() => setIsTimerPaused(!isTimerPaused)}
-            title={isTimerPaused ? 'Resume Timer' : 'Pause Timer'}
-            style={{
-              background: 'rgba(255,255,255,0.1)',
-              border: 'none',
-              borderRadius: '50%',
-              width: '42px',
-              height: '42px',
-              color: 'white',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              transition: 'all 0.2s'
-            }}
-          >
-            {isTimerPaused ? <Play size={20} color="#10b981" /> : <Pause size={20} />}
-          </button>
-
-          {/* Shutter Button (Allows instant snap anytime) */}
-          <button
-            onClick={triggerSnapshot}
-            disabled={isSaving}
-            title="Snap immediately"
-            style={{
-              width: '64px',
-              height: '64px',
-              borderRadius: '50%',
-              background: 'rgba(255,255,255,0.2)',
-              border: '4px solid white',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              boxShadow: '0 4px 15px rgba(0,0,0,0.5)',
-              transition: 'transform 0.1s ease',
-              padding: 0
-            }}
-            onMouseDown={e => e.currentTarget.style.transform = 'scale(0.92)'}
-            onMouseUp={e => e.currentTarget.style.transform = 'scale(1)'}
-          >
-            <div style={{
-              width: '48px',
-              height: '48px',
-              borderRadius: '50%',
-              background: mode === 'auto' ? '#6366f1' : '#10b981',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: 'white'
-            }}>
-              <CameraIcon size={22} />
-            </div>
-          </button>
+        {/* Center: Instant Shutter & Controls */}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.35rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            {/* Shutter Button (Allows instant snap anytime) */}
+            <button
+              onClick={triggerSnapshot}
+              disabled={isSaving}
+              title={mode === 'auto' ? 'Snap immediately' : 'Click, Press Space or Enter to Capture'}
+              style={{
+                width: '66px',
+                height: '66px',
+                borderRadius: '50%',
+                background: 'rgba(255,255,255,0.2)',
+                border: '4px solid white',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                boxShadow: '0 4px 15px rgba(0,0,0,0.5)',
+                transition: 'transform 0.1s ease',
+                padding: 0
+              }}
+              onMouseDown={e => e.currentTarget.style.transform = 'scale(0.92)'}
+              onMouseUp={e => e.currentTarget.style.transform = 'scale(1)'}
+            >
+              <div style={{
+                width: '50px',
+                height: '50px',
+                borderRadius: '50%',
+                background: mode === 'auto' ? '#6366f1' : '#10b981',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'white'
+              }}>
+                <CameraIcon size={24} />
+              </div>
+            </button>
+          </div>
+          {mode === 'manual' && (
+            <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
+              Press <strong>Space</strong> or <strong>Enter</strong> to snap
+            </span>
+          )}
         </div>
 
         {/* Right: Done / Finish Button */}

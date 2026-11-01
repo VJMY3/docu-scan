@@ -1,31 +1,15 @@
-import React, { useState } from 'react';
-import { Zap, Edit3, Camera, LayoutDashboard, ArrowRight, Clock } from 'lucide-react';
-
-export const SHUTTER_SPEED_OPTIONS = [
-  { value: 2, label: '2 Seconds (Ultra Fast)' },
-  { value: 3, label: '3 Seconds (Fast)' },
-  { value: 5, label: '5 Seconds (Default)' },
-  { value: 10, label: '10 Seconds' },
-  { value: 15, label: '15 Seconds' },
-  { value: 20, label: '20 Seconds' },
-  { value: 30, label: '30 Seconds (Half Min)' },
-  { value: 45, label: '45 Seconds' },
-  { value: 60, label: '60 Seconds (1 Minute)' },
-];
+import React from 'react';
+import { Zap, Edit3, Camera, LayoutDashboard, ArrowRight } from 'lucide-react';
 
 interface ModeSelectModalProps {
-  initialSpeed?: number;
-  onSelectMode: (mode: 'auto' | 'manual', speed: number) => void;
+  onSelectMode: (mode: 'auto' | 'manual') => void;
   onGoToDashboard: () => void;
 }
 
 export const ModeSelectModal: React.FC<ModeSelectModalProps> = ({
-  initialSpeed = 5,
   onSelectMode,
   onGoToDashboard
 }) => {
-  const [selectedSpeed, setSelectedSpeed] = useState<number>(initialSpeed);
-
   return (
     <div style={{
       position: 'fixed',
@@ -51,7 +35,7 @@ export const ModeSelectModal: React.FC<ModeSelectModalProps> = ({
         boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.7)'
       }}>
         {/* Header */}
-        <div style={{ textAlign: 'center', marginBottom: '1.75rem' }}>
+        <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
           <div style={{
             display: 'inline-flex',
             alignItems: 'center',
@@ -66,74 +50,11 @@ export const ModeSelectModal: React.FC<ModeSelectModalProps> = ({
             <Camera size={28} color="white" />
           </div>
           <h2 style={{ margin: '0 0 0.5rem 0', fontSize: '1.75rem', fontWeight: 700, color: '#f8fafc' }}>
-            Choose Camera Mode & Shutter Speed
+            Choose Camera Mode
           </h2>
           <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.95rem' }}>
-            షట్టర్ స్పీడ్ మరియు మోడ్ ఎంచుకోండి — కెమెరా వెంటనే ఆన్ అవుతుంది
+            కెమెరా మోడ్ ఎంచుకోండి — Space, Enter లేదా బటన్ క్లిక్ తో ఫోటోలు సేవ్ చేసుకోండి
           </p>
-        </div>
-
-        {/* Shutter Speed Dropdown Selector */}
-        <div style={{
-          background: 'rgba(255, 255, 255, 0.04)',
-          border: '1px solid rgba(255, 255, 255, 0.12)',
-          borderRadius: '16px',
-          padding: '1.1rem 1.4rem',
-          marginBottom: '1.75rem',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          flexWrap: 'wrap',
-          gap: '1rem'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
-            <div style={{
-              background: 'rgba(99, 102, 241, 0.2)',
-              padding: '0.6rem',
-              borderRadius: '12px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}>
-              <Clock size={22} color="#818cf8" />
-            </div>
-            <div>
-              <div style={{ fontWeight: 600, color: '#f8fafc', fontSize: '1rem' }}>
-                షట్టర్ స్పీడ్ టైమర్ (Shutter Speed Interval)
-              </div>
-              <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
-                ప్రతి ఎన్ని సెకన్లకు ఫోటో క్యాప్చర్ అవ్వాలి? (2 సెకన్ల నుండి 1 నిమిషం వరకు)
-              </div>
-            </div>
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <select
-              value={selectedSpeed}
-              onChange={(e) => setSelectedSpeed(Number(e.target.value))}
-              className="input-field"
-              style={{
-                width: 'auto',
-                minWidth: '200px',
-                padding: '0.65rem 1rem',
-                borderRadius: '10px',
-                fontSize: '0.95rem',
-                fontWeight: 600,
-                background: '#1e293b',
-                color: '#fff',
-                border: '1.5px solid #6366f1',
-                boxShadow: '0 0 12px rgba(99, 102, 241, 0.25)',
-                cursor: 'pointer',
-                margin: 0
-              }}
-            >
-              {SHUTTER_SPEED_OPTIONS.map(opt => (
-                <option key={opt.value} value={opt.value}>
-                  ⏱️ {opt.label}
-                </option>
-              ))}
-            </select>
-          </div>
         </div>
 
         {/* Options Grid */}
@@ -145,7 +66,7 @@ export const ModeSelectModal: React.FC<ModeSelectModalProps> = ({
         }}>
           {/* Automatic Mode Card */}
           <div
-            onClick={() => onSelectMode('auto', selectedSpeed)}
+            onClick={() => onSelectMode('auto')}
             style={{
               padding: '1.5rem',
               borderRadius: '16px',
@@ -183,7 +104,7 @@ export const ModeSelectModal: React.FC<ModeSelectModalProps> = ({
                 fontWeight: 600,
                 marginBottom: '1rem'
               }}>
-                <Zap size={14} /> {selectedSpeed}s Auto Interval
+                <Zap size={14} /> Direct Instant Save
               </div>
 
               <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.3rem', color: '#fff' }}>
@@ -191,7 +112,7 @@ export const ModeSelectModal: React.FC<ModeSelectModalProps> = ({
               </h3>
 
               <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.9rem', lineHeight: '1.5' }}>
-                షట్టర్ బటన్ నొక్కాల్సిన పని లేకుండా ప్రతి <strong>{selectedSpeed} సెకన్లకు</strong> ఆటోమేటిక్ గా స్నాప్‌షాట్ తీసి నేరుగా <strong>డేటాబేస్ లో సేవ్</strong> చేస్తుంది.
+                Space, Enter లేదా బటన్ క్లిక్ చేసిన వెంటనే ఎటువంటి పాప్-అప్స్ లేకుండా నేరుగా <strong>సుపబాస్ డేటాబేస్ లో సేవ్</strong> అవుతుంది.
               </p>
             </div>
 
@@ -204,14 +125,14 @@ export const ModeSelectModal: React.FC<ModeSelectModalProps> = ({
               fontWeight: 600,
               fontSize: '0.9rem'
             }}>
-              <span>Start Auto Scan ({selectedSpeed}s)</span>
+              <span>Launch Automatic Mode</span>
               <ArrowRight size={18} />
             </div>
           </div>
 
           {/* Manual Mode Card */}
           <div
-            onClick={() => onSelectMode('manual', selectedSpeed)}
+            onClick={() => onSelectMode('manual')}
             style={{
               padding: '1.5rem',
               borderRadius: '16px',
@@ -249,7 +170,7 @@ export const ModeSelectModal: React.FC<ModeSelectModalProps> = ({
                 fontWeight: 600,
                 marginBottom: '1rem'
               }}>
-                <Edit3 size={14} /> {selectedSpeed}s Snap + Name
+                <Edit3 size={14} /> Name & Save
               </div>
 
               <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.3rem', color: '#fff' }}>
@@ -257,7 +178,7 @@ export const ModeSelectModal: React.FC<ModeSelectModalProps> = ({
               </h3>
 
               <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.9rem', lineHeight: '1.5' }}>
-                లైవ్ రికార్డ్ అవుతూ ప్రతి <strong>{selectedSpeed} సెకన్లకు</strong> ఫోటో క్యాప్చర్ అవుతుంది. వెంటనే ఫోటో పేరు (Name) ఎంటర్ చేయడానికి <strong>పాప్-అప్</strong> వస్తుంది.
+                Space, Enter లేదా బటన్ క్లిక్ చేసి డాక్యుమెంట్ పేరు లేదా మునుపటి సేవ్ చేసిన పేర్ల డ్రాప్‌డౌన్ తో సేవ్ చేసుకోండి.
               </p>
             </div>
 
@@ -270,7 +191,7 @@ export const ModeSelectModal: React.FC<ModeSelectModalProps> = ({
               fontWeight: 600,
               fontSize: '0.9rem'
             }}>
-              <span>Start Manual Scan ({selectedSpeed}s)</span>
+              <span>Launch Manual Mode</span>
               <ArrowRight size={18} />
             </div>
           </div>
@@ -282,15 +203,15 @@ export const ModeSelectModal: React.FC<ModeSelectModalProps> = ({
             onClick={onGoToDashboard}
             className="btn btn-secondary"
             style={{
-              padding: '0.65rem 1.25rem',
-              fontSize: '0.9rem',
-              color: 'var(--text-muted)',
+              padding: '0.65rem 1.75rem',
               display: 'flex',
               alignItems: 'center',
-              gap: '0.5rem'
+              gap: '0.5rem',
+              borderRadius: '12px',
+              fontSize: '0.95rem'
             }}
           >
-            <LayoutDashboard size={16} /> View Saved Scans Dashboard
+            <LayoutDashboard size={18} /> Go to Dashboard
           </button>
         </div>
       </div>
