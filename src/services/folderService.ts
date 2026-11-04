@@ -1,11 +1,17 @@
 import type { DocumentRecord } from '../types/document';
-import { supabase } from './supabaseClient';
+import { getSupabaseClient } from './supabaseClient';
 
 /**
  * Get all folders from Supabase by querying distinct folder values from documents
  */
 export const getFolders = async (): Promise<string[]> => {
   try {
+    const supabase = getSupabaseClient();
+    if (!supabase) {
+      console.error('Supabase client not available');
+      return [];
+    }
+
     const { data, error } = await supabase
       .from('inventory_scans')
       .select('folder')
@@ -18,7 +24,7 @@ export const getFolders = async (): Promise<string[]> => {
     }
 
     // Get unique folder names
-    const uniqueFolders = [...new Set(data.map(item => item.folder).filter(Boolean))];
+    const uniqueFolders = [...new Set(data.map((item: any) => item.folder).filter(Boolean))];
     return uniqueFolders as string[];
   } catch (error) {
     console.error('Error in getFolders:', error);
@@ -54,6 +60,11 @@ export const addFolder = async (folderName: string): Promise<string[]> => {
  */
 export const deleteFolder = async (folderName: string): Promise<string[]> => {
   try {
+    const supabase = getSupabaseClient();
+    if (!supabase) {
+      throw new Error('Supabase client not available');
+    }
+
     // Update all documents in this folder to have no folder
     const { error } = await supabase
       .from('inventory_scans')
