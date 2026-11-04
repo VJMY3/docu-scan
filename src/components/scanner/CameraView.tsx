@@ -537,7 +537,12 @@ export const CameraView: React.FC<CameraViewProps> = ({
                 fontSize: '0.82rem',
                 fontWeight: 600
               }}>
-                <span style={{ color: '#a5b4fc' }}>⚡ Automatic (Direct Save on Space / Enter / Click)</span>
+                <span style={{ color: '#a5b4fc' }}>⚡ Automatic (Direct Save)</span>
+                {selectedFolder && (
+                  <span style={{ color: '#34d399', marginLeft: '0.5rem' }}>
+                    → 📁 {selectedFolder}
+                  </span>
+                )}
               </div>
             ) : (
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
