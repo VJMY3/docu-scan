@@ -660,21 +660,66 @@ export const EnhancedDocumentGallery = ({
                       </p>
                     </div>
                   </div>
-                  {folderName !== 'Uncategorized' && (
-                    <button
-                      onClick={() => handleDeleteFolder(folderName)}
-                      style={{
-                        padding: '0.4rem',
-                        background: 'rgba(239, 68, 68, 0.15)',
-                        border: 'none',
-                        borderRadius: '6px',
-                        color: '#f87171',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  )}
+                  <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                    {/* Select All in Folder Button */}
+                    {docs.length > 0 && (
+                      <button
+                        onClick={() => {
+                          const folderDocIds = docs.map(d => d.id);
+                          const allSelected = folderDocIds.every(id => selectedIds.has(id));
+                          
+                          if (allSelected) {
+                            // Deselect all in this folder
+                            const newSet = new Set(selectedIds);
+                            folderDocIds.forEach(id => newSet.delete(id));
+                            setSelectedIds(newSet);
+                          } else {
+                            // Select all in this folder
+                            const newSet = new Set(selectedIds);
+                            folderDocIds.forEach(id => newSet.add(id));
+                            setSelectedIds(newSet);
+                          }
+                        }}
+                        style={{
+                          padding: '0.4rem 0.75rem',
+                          background: 'rgba(99, 102, 241, 0.15)',
+                          border: '1px solid rgba(99, 102, 241, 0.4)',
+                          borderRadius: '6px',
+                          color: '#818cf8',
+                          cursor: 'pointer',
+                          fontSize: '0.8rem',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '0.35rem'
+                        }}
+                      >
+                        {docs.every(d => selectedIds.has(d.id)) ? (
+                          <>
+                            <CheckSquare size={14} /> Deselect All
+                          </>
+                        ) : (
+                          <>
+                            <Square size={14} /> Select All
+                          </>
+                        )}
+                      </button>
+                    )}
+                    {folderName !== 'Uncategorized' && (
+                      <button
+                        onClick={() => handleDeleteFolder(folderName)}
+                        style={{
+                          padding: '0.4rem',
+                          background: 'rgba(239, 68, 68, 0.15)',
+                          border: 'none',
+                          borderRadius: '6px',
+                          color: '#f87171',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <div style={{
                   display: 'grid',
