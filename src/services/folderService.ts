@@ -2,7 +2,7 @@ import type { DocumentRecord } from '../types/document';
 import { getSupabaseClient } from './supabaseClient';
 
 /**
- * Get all folders from Supabase by querying distinct folder values from documents
+ * Get all folders from Supabase folders table
  */
 export const getFolders = async (): Promise<string[]> => {
   try {
@@ -13,19 +13,16 @@ export const getFolders = async (): Promise<string[]> => {
     }
 
     const { data, error } = await supabase
-      .from('inventory_scans')
-      .select('folder')
-      .not('folder', 'is', null)
-      .order('folder');
+      .from('folders')
+      .select('name')
+      .order('name');
 
     if (error) {
       console.error('Error fetching folders from Supabase:', error);
       return [];
     }
 
-    // Get unique folder names
-    const uniqueFolders = [...new Set(data.map((item: any) => item.folder).filter(Boolean))];
-    return uniqueFolders as string[];
+    return data.map((folder: any) => folder.name);
   } catch (error) {
     console.error('Error in getFolders:', error);
     return [];
@@ -33,8 +30,7 @@ export const getFolders = async (): Promise<string[]> => {
 };
 
 /**
- * Add a new folder (by creating a placeholder or just validating the name)
- * Note: Folders are implicitly created when a document is assigned to them
+ * Add a new folder to Supabase folders table
  */
 export const addFolder = async (folderName: string): Promise<string[]> => {
   const clean = folderName.trim();
@@ -43,20 +39,38 @@ export const addFolder = async (folderName: string): Promise<string[]> => {
     return folders;
   }
 
-  const current = await getFolders();
-  
-  // Check if folder already exists (case-insensitive)
-  if (current.some(f => f.toLowerCase() === clean.toLowerCase())) {
-    throw new Error('Folder already exists');
-  }
+  try {
+    const supabase = getSupabaseClient();
+    if (!supabase) {
+      throw new Error('Supabase client not available');
+    }
 
-  // Folders are created implicitly when documents are assigned to them
-  // So we just return the updated list including the new folder
-  return [...current, clean];
+    // Check if folder already exists (case-insensitive)
+    const current = await getFolders();
+    if (current.some(f => f.toLowerCase() === clean.toLowerCase())) {
+      throw new Error('Folder already exists');
+    }
+
+    // Insert the new folder
+    const { error } = await supabase
+      .from('folders')
+      .insert({ name: clean });
+
+    if (error) {
+      console.error('Error creating folder in Supabase:', error);
+      throw new Error('Failed to create folder');
+    }
+
+    // Return updated folder list
+    return await getFolders();
+  } catch (error) {
+    console.error('Error in addFolder:', error);
+    throw error;
+  }
 };
 
 /**
- * Delete a folder and unassign all documents from it
+ * Delete a folder from Supabase and unassign all documents from it
  */
 export const deleteFolder = async (folderName: string): Promise<string[]> => {
   try {
@@ -65,14 +79,25 @@ export const deleteFolder = async (folderName: string): Promise<string[]> => {
       throw new Error('Supabase client not available');
     }
 
-    // Update all documents in this folder to have no folder
-    const { error } = await supabase
+    // First, update all documents in this folder to have no folder
+    const { error: updateError } = await supabase
       .from('inventory_scans')
       .update({ folder: null })
       .eq('folder', folderName);
 
-    if (error) {
-      console.error('Error deleting folder from Supabase:', error);
+    if (updateError) {
+      console.error('Error updating documents:', updateError);
+      throw new Error('Failed to update documents');
+    }
+
+    // Then delete the folder from the folders table
+    const { error: deleteError } = await supabase
+      .from('folders')
+      .delete()
+      .eq('name', folderName);
+
+    if (deleteError) {
+      console.error('Error deleting folder from Supabase:', deleteError);
       throw new Error('Failed to delete folder');
     }
 

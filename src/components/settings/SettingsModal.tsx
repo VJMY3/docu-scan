@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Check, Lock, Database, RefreshCw, Eye, EyeOff, Copy, FileCode } from 'lucide-react';
 import { getStoredConfig, saveConfig, testSupabaseConnection, DEFAULT_SUPABASE_SQL, normalizeSupabaseUrl, normalizeSupabaseKey } from '../../services/supabaseClient';
+import { promptForPassword } from '../../services/securityService';
 import type { AppConfig } from '../../types/document';
 
 interface SettingsModalProps {
@@ -62,8 +63,12 @@ export const SettingsModal = ({ onClose }: SettingsModalProps) => {
     setTimeout(() => setCopiedSql(false), 2500);
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Ask for password before saving
+    const verified = await promptForPassword('save database settings');
+    if (!verified) return;
 
     if (config.passcode && !/^\d{4}$/.test(config.passcode)) {
       setStatus({ type: 'error', msg: 'Security Passcode must be exactly 4 digits (e.g. 1234).' });

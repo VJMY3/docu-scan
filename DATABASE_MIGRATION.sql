@@ -7,7 +7,7 @@
 -- This is safe to run multiple times (idempotent).
 -- ============================================================
 
--- Add folder column to inventory_scans table if it doesn't exist
+-- 1. Add folder column to inventory_scans table if it doesn't exist
 DO $$
 BEGIN
     IF NOT EXISTS (
@@ -26,6 +26,29 @@ BEGIN
     END IF;
 END $$;
 
+-- 2. Create folders table if it doesn't exist
+CREATE TABLE IF NOT EXISTS public.folders (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name TEXT NOT NULL UNIQUE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 3. Enable Row Level Security (RLS) on folders table
+ALTER TABLE public.folders ENABLE ROW LEVEL SECURITY;
+
+-- 4. Allow Public Full Access on folders table
+DROP POLICY IF EXISTS "Allow public all folders" ON public.folders;
+CREATE POLICY "Allow public all folders" 
+ON public.folders 
+FOR ALL 
+TO public 
+USING (true) 
+WITH CHECK (true);
+
+-- 5. Create index on folder name for faster lookups
+CREATE INDEX IF NOT EXISTS idx_folders_name ON public.folders(name);
+
 -- Verify the migration
 SELECT column_name, data_type, is_nullable
 FROM information_schema.columns
@@ -33,7 +56,10 @@ WHERE table_schema = 'public'
 AND table_name = 'inventory_scans'
 ORDER BY ordinal_position;
 
+SELECT * FROM public.folders ORDER BY name;
+
 -- ============================================================
 -- Expected Output:
--- The query should show all columns including the new 'folder' column
+-- 1. The first query should show all columns including the new 'folder' column
+-- 2. The second query should show all folders (may be empty initially)
 -- ============================================================
