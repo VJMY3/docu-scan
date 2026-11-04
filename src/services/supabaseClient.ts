@@ -40,6 +40,7 @@ CREATE TABLE IF NOT EXISTS public.inventory_scans (
     image_url TEXT,
     status TEXT DEFAULT 'verified',
     raw_text TEXT,
+    folder TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -343,6 +344,7 @@ export const saveDocumentToSupabase = async (doc: DocumentRecord): Promise<Docum
       image_url: doc.image_url,
       status: doc.status || 'verified',
       raw_text: doc.raw_text,
+      folder: doc.folder || null,
       created_at: doc.created_at,
       updated_at: doc.updated_at
     });
@@ -386,6 +388,7 @@ export const fetchDocumentsFromSupabase = async (): Promise<DocumentRecord[]> =>
       status: scan.status || 'verified',
       raw_text: scan.raw_text || '',
       items: [],
+      folder: scan.folder || undefined,
       created_at: scan.created_at || new Date().toISOString(),
       updated_at: scan.updated_at || new Date().toISOString(),
       synced_to_supabase: true
@@ -433,6 +436,7 @@ export const updateDocumentInSupabase = async (doc: DocumentRecord): Promise<boo
       title: doc.title,
       document_date: doc.document_date,
       raw_text: doc.raw_text,
+      folder: doc.folder || null,
       updated_at: new Date().toISOString()
     })
     .eq('id', doc.id);

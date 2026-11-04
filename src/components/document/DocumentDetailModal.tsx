@@ -8,14 +8,31 @@ interface DocumentDetailModalProps {
 }
 
 export const DocumentDetailModal = ({ document, onClose, onEdit }: DocumentDetailModalProps) => {
-  const handleDownload = () => {
+  const handleDownload = async () => {
     if (!document.image_url) return;
-    const a = window.document.createElement('a');
-    a.href = document.image_url;
-    a.download = `${document.title.replace(/\s+/g, '_')}.jpg`;
-    window.document.body.appendChild(a);
-    a.click();
-    window.document.body.removeChild(a);
+    
+    try {
+      // Fetch the image as a blob
+      const response = await fetch(document.image_url);
+      const blob = await response.blob();
+      
+      // Create a blob URL
+      const blobUrl = window.URL.createObjectURL(blob);
+      
+      // Create download link
+      const a = window.document.createElement('a');
+      a.href = blobUrl;
+      a.download = `${document.title.replace(/[^a-z0-9]/gi, '_')}.jpg`;
+      window.document.body.appendChild(a);
+      a.click();
+      
+      // Cleanup
+      window.document.body.removeChild(a);
+      window.URL.revokeObjectURL(blobUrl);
+    } catch (error) {
+      console.error('Download failed:', error);
+      alert('Failed to download image. Please try again.');
+    }
   };
 
   return (

@@ -17,6 +17,7 @@ export interface DocumentRecord {
   created_at: string;
   updated_at: string;
   synced_to_supabase: boolean;
+  folder?: string; // New: folder organization
 }
 
 export interface AppConfig {

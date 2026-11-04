@@ -5,7 +5,7 @@ import { FileUploader } from './components/scanner/FileUploader';
 import { SettingsModal } from './components/settings/SettingsModal';
 import { LockScreen } from './components/settings/LockScreen';
 import { StatsOverview } from './components/dashboard/StatsOverview';
-import { DocumentTable } from './components/dashboard/DocumentTable';
+import { EnhancedDocumentGallery } from './components/dashboard/EnhancedDocumentGallery';
 import { DocumentDetailModal } from './components/document/DocumentDetailModal';
 import { DocumentEditForm } from './components/document/DocumentEditForm';
 import {
@@ -16,6 +16,7 @@ import {
   getSavedDocumentNames,
   addSavedDocumentName
 } from './services/storageService';
+import { getFolders } from './services/folderService';
 import { uploadImageToSupabase } from './services/supabaseClient';
 import type { DocumentRecord, DashboardStats } from './types/document';
 import { Camera, ShieldCheck, Settings, Menu, RefreshCw, Lock, Zap, Edit3, AlertTriangle } from 'lucide-react';
@@ -35,6 +36,7 @@ function App() {
 
   // Saved document names for dropdown selection
   const [savedNames, setSavedNames] = useState<string[]>(() => getSavedDocumentNames());
+  const [folders, setFolders] = useState<string[]>(() => getFolders());
 
   const [showCamera, setShowCamera] = useState(false);
   const [showConfig, setShowConfig] = useState(false);
@@ -54,6 +56,7 @@ function App() {
       const docs = await loadAllDocuments();
       setDocuments(docs);
       setSavedNames(getSavedDocumentNames());
+      setFolders(getFolders());
       setStats({
         totalScans: docs.length,
         pendingCount: 0
@@ -92,7 +95,7 @@ function App() {
   };
 
   // Direct save to Supabase Database & Storage ONLY (No localStorage!)
-  const handleSaveCapturedSnapshot = async (file: File, title: string, mode: ScannerMode): Promise<boolean> => {
+  const handleSaveCapturedSnapshot = async (file: File, title: string, mode: ScannerMode, folder?: string): Promise<boolean> => {
     setIsSavingScan(true);
     try {
       // 1. Upload image DIRECTLY to Supabase Storage bucket 'scans'
@@ -109,6 +112,7 @@ function App() {
           ? `Automatic Mode Capture`
           : `Manual Mode Capture`,
         items: [],
+        folder: folder || undefined,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
         synced_to_supabase: true
@@ -190,6 +194,17 @@ function App() {
       }
     } catch (err: any) {
       alert(`Failed to update document in Supabase: ${err.message}`);
+    }
+  };
+
+  // Update folder for a document
+  const handleUpdateFolder = async (doc: DocumentRecord, folder: string) => {
+    try {
+      const updatedDoc = { ...doc, folder: folder || undefined };
+      await updateDocument(updatedDoc);
+      setDocuments(prev => prev.map(d => d.id === updatedDoc.id ? updatedDoc : d));
+    } catch (err: any) {
+      alert(`Failed to update folder: ${err.message}`);
     }
   };
 
@@ -418,12 +433,14 @@ function App() {
           <FileUploader onFileSelect={handleProcessDroppedFile} />
         </div>
 
-        {/* Scans Database Table */}
-        <DocumentTable
+        {/* Scans Database Gallery */}
+        <EnhancedDocumentGallery
           documents={documents}
           onView={(doc) => setViewingDoc(doc)}
           onEdit={(doc) => setEditingDoc(doc)}
           onDelete={handleDelete}
+          onUpdateFolder={handleUpdateFolder}
+          onRefresh={refreshData}
         />
       </div>
 
@@ -446,6 +463,7 @@ function App() {
             <CameraView
               initialMode={cameraMode}
               savedNames={savedNames}
+              folders={folders}
               onSaveNewName={handleSaveNewName}
               onCapture={handleSaveCapturedSnapshot}
               onCancel={handleCloseCamera}

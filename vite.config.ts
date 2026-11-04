@@ -1,9 +1,9 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
-import basicSsl from '@vitejs/plugin-basic-ssl'
+// import basicSsl from '@vitejs/plugin-basic-ssl'
 
 // https://vite.dev/config/
 export default defineConfig({
-  // @ts-ignore
-  plugins: [react(), basicSsl()],
+  plugins: [react()],
+  // Removed basicSsl() for simpler HTTP development
 })

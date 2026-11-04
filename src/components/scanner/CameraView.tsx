@@ -9,8 +9,9 @@ export type ScannerMode = 'auto' | 'manual';
 interface CameraViewProps {
   initialMode?: ScannerMode;
   savedNames?: string[];
+  folders?: string[];
   onSaveNewName?: (name: string) => void;
-  onCapture: (file: File, title: string, mode: ScannerMode) => Promise<boolean | void>;
+  onCapture: (file: File, title: string, mode: ScannerMode, folder?: string) => Promise<boolean | void>;
   onCancel: () => void;
   isSaving?: boolean;
 }
@@ -24,6 +25,7 @@ interface PendingManualCapture {
 export const CameraView: React.FC<CameraViewProps> = ({
   initialMode = 'auto',
   savedNames = [],
+  folders = [],
   onSaveNewName,
   onCapture,
   onCancel,
@@ -41,6 +43,9 @@ export const CameraView: React.FC<CameraViewProps> = ({
   const [recentThumbnails, setRecentThumbnails] = useState<string[]>([]);
   const [showFlash, setShowFlash] = useState(false);
   const [statusToast, setStatusToast] = useState<string | null>(null);
+
+  // Folder selection
+  const [selectedFolder, setSelectedFolder] = useState<string>('');
 
   // Continuous auto-apply name in Manual mode
   const [activeContinuousName, setActiveContinuousName] = useState<string | null>(null);
@@ -182,7 +187,7 @@ export const CameraView: React.FC<CameraViewProps> = ({
       const title = `Auto Scan #${sessionCount} (${timeStr})`;
       setSessionCount(c => c + 1);
       showToast(`⚡ ${title} saving...`);
-      const success = await onCapture(file, title, 'auto');
+      const success = await onCapture(file, title, 'auto', selectedFolder || undefined);
       if (success !== false) {
         showToast(`✓ ${title} saved to database!`);
       }
@@ -195,7 +200,7 @@ export const CameraView: React.FC<CameraViewProps> = ({
         const title = `${activeContinuousName} (${nextCount})`;
         setSessionCount(c => c + 1);
         showToast(`⚡ "${title}" saving directly...`);
-        const success = await onCapture(file, title, 'manual');
+        const success = await onCapture(file, title, 'manual', selectedFolder || undefined);
         if (success !== false) {
           showToast(`✓ "${title}" saved to database!`);
         }
@@ -271,7 +276,7 @@ export const CameraView: React.FC<CameraViewProps> = ({
         onSaveNewName(finalTitle);
       }
 
-      const success = await onCapture(pendingCapture.file, finalTitle, 'manual');
+      const success = await onCapture(pendingCapture.file, finalTitle, 'manual', selectedFolder || undefined);
       if (success !== false) {
         setSessionCount(c => c + 1);
 
@@ -479,6 +484,42 @@ export const CameraView: React.FC<CameraViewProps> = ({
               <Edit3 size={14} /> Manual + Name
             </button>
           </div>
+
+          {/* Folder Selection Dropdown */}
+          {folders && folders.length > 0 && (
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              background: 'rgba(0,0,0,0.65)',
+              backdropFilter: 'blur(10px)',
+              padding: '0.35rem 0.75rem',
+              borderRadius: '20px',
+              border: '1px solid rgba(255,255,255,0.15)'
+            }}>
+              <span style={{ fontSize: '0.8rem', color: '#cbd5e1', fontWeight: 600 }}>📁</span>
+              <select
+                value={selectedFolder}
+                onChange={(e) => setSelectedFolder(e.target.value)}
+                style={{
+                  background: 'transparent',
+                  color: selectedFolder ? '#818cf8' : '#cbd5e1',
+                  border: 'none',
+                  padding: '0.2rem 0.5rem',
+                  borderRadius: '8px',
+                  fontSize: '0.82rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  outline: 'none'
+                }}
+              >
+                <option value="">No Folder</option>
+                {folders.map((folder, i) => (
+                  <option key={i} value={folder}>{folder}</option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {/* Center: Mode Indicator & Settings */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
