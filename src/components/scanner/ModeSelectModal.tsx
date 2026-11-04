@@ -53,7 +53,7 @@ export const ModeSelectModal: React.FC<ModeSelectModalProps> = ({
             Choose Camera Mode
           </h2>
           <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.95rem' }}>
-            కెమెరా మోడ్ ఎంచుకోండి — Space, Enter లేదా బటన్ క్లిక్ తో ఫోటోలు సేవ్ చేసుకోండి
+            Select camera mode — capture and save photos using Space, Enter, or the shutter button
           </p>
         </div>
 
@@ -108,11 +108,11 @@ export const ModeSelectModal: React.FC<ModeSelectModalProps> = ({
               </div>
 
               <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.3rem', color: '#fff' }}>
-                ఆటోమేటిక్ (Automatic)
+                Automatic Mode
               </h3>
 
               <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.9rem', lineHeight: '1.5' }}>
-                Space, Enter లేదా బటన్ క్లిక్ చేసిన వెంటనే ఎటువంటి పాప్-అప్స్ లేకుండా నేరుగా <strong>సుపబాస్ డేటాబేస్ లో సేవ్</strong> అవుతుంది.
+                Press Space, Enter, or click the shutter button to save directly to <strong>Supabase database</strong> with no popups.
               </p>
             </div>
 
@@ -174,11 +174,11 @@ export const ModeSelectModal: React.FC<ModeSelectModalProps> = ({
               </div>
 
               <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.3rem', color: '#fff' }}>
-                మాన్యువల్ (Manual)
+                Manual Mode
               </h3>
 
               <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.9rem', lineHeight: '1.5' }}>
-                Space, Enter లేదా బటన్ క్లిక్ చేసి డాక్యుమెంట్ పేరు లేదా మునుపటి సేవ్ చేసిన పేర్ల డ్రాప్‌డౌన్ తో సేవ్ చేసుకోండి.
+                Press Space, Enter, or click the shutter button to save with a custom document name or select from saved names.
               </p>
             </div>
 

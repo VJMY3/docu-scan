@@ -30,7 +30,7 @@ export const DocumentTable = ({ documents, onView, onEdit, onDelete }: DocumentT
         <div>
           <h3 style={{ margin: '0 0 0.25rem 0', fontSize: '1.2rem' }}>Supabase Cloud Database Scans</h3>
           <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-            సుపబాస్ డేటాబేస్ & స్టోరేజ్ లో సేవ్ అయిన అన్ని స్నాప్‌షాట్‌లు ({documents.length})
+            All scans saved in Supabase database & storage ({documents.length})
           </p>
         </div>
         <div style={{ position: 'relative', width: '260px' }}>

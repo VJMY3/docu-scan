@@ -181,10 +181,10 @@ export const CameraView: React.FC<CameraViewProps> = ({
       // Automatic Mode: Save directly to database
       const title = `Auto Scan #${sessionCount} (${timeStr})`;
       setSessionCount(c => c + 1);
-      showToast(`⚡ ${title} సేవ్ అవుతోంది...`);
+      showToast(`⚡ ${title} saving...`);
       const success = await onCapture(file, title, 'auto');
       if (success !== false) {
-        showToast(`✓ ${title} డేటాబేస్ లో సేవ్ అయింది!`);
+        showToast(`✓ ${title} saved to database!`);
       }
     } else {
       // Manual Mode:
@@ -194,10 +194,10 @@ export const CameraView: React.FC<CameraViewProps> = ({
         setContinuousCount(c => c + 1);
         const title = `${activeContinuousName} (${nextCount})`;
         setSessionCount(c => c + 1);
-        showToast(`⚡ "${title}" డైరెక్ట్ గా సేవ్ అవుతోంది...`);
+        showToast(`⚡ "${title}" saving directly...`);
         const success = await onCapture(file, title, 'manual');
         if (success !== false) {
-          showToast(`✓ "${title}" డేటాబేస్ లో సేవ్ అయింది!`);
+          showToast(`✓ "${title}" saved to database!`);
         }
       } else {
         // If NOT selected from dropdown, ASK NAME EVERY TIME!
@@ -279,9 +279,9 @@ export const CameraView: React.FC<CameraViewProps> = ({
         if (lockNameForUpcoming) {
           setActiveContinuousName(finalTitle);
           setContinuousCount(2);
-          showToast(`✓ "${finalTitle}" సేవ్ అయింది. ఇకపై డ్రాప్‌డౌన్ పేరుతో డైరెక్ట్ గా సేవ్ అవుతుంది!`);
+          showToast(`✓ "${finalTitle}" saved. Future scans will auto-save with this name!`);
         } else {
-          showToast(`✓ "${finalTitle}" డేటాబేస్ లో సేవ్ అయింది!`);
+          showToast(`✓ "${finalTitle}" saved to database!`);
         }
       }
     } finally {
@@ -297,14 +297,14 @@ export const CameraView: React.FC<CameraViewProps> = ({
       URL.revokeObjectURL(pendingCapture.previewUrl);
     }
     setPendingCapture(null);
-    showToast(`స్నాప్‌షాట్ రద్దు చేయబడింది`);
+    showToast(`Snapshot discarded`);
   };
 
   // Reset active continuous name so it starts asking popup again
   const handleResetContinuousName = () => {
     setActiveContinuousName(null);
     setContinuousCount(1);
-    showToast(`పేరు లాక్ తొలగించబడింది. తదుపరి ఫోటోకి పాప్-అప్ వస్తుంది.`);
+    showToast(`Name lock cleared. Next photo will ask for name.`);
   };
 
   const toggleFlash = async () => {
@@ -508,10 +508,10 @@ export const CameraView: React.FC<CameraViewProps> = ({
                     if (val) {
                       setActiveContinuousName(val);
                       setContinuousCount(1);
-                      showToast(`డ్రాప్‌డౌన్ నుండి "${val}" ఎంచుకున్నారు. ఇకపై అడగకుండా డైరెక్ట్ గా సేవ్ అవుతుంది!`);
+                      showToast(`Selected "${val}" from dropdown. Will save directly without asking!`);
                     } else {
                       setActiveContinuousName(null);
-                      showToast(`ప్రతిసారీ పేరు అడుగుతుంది`);
+                      showToast(`Will ask for document name every time`);
                     }
                   }}
                   style={{
@@ -527,9 +527,9 @@ export const CameraView: React.FC<CameraViewProps> = ({
                     boxShadow: activeContinuousName ? '0 0 12px rgba(16, 185, 129, 0.35)' : 'none'
                   }}
                 >
-                  <option value="">-- ప్రతిసారీ పేరు అడుగు (Ask name every time) --</option>
+                  <option value="">-- Ask name every time --</option>
                   {savedNames && savedNames.length > 0 && (
-                    <optgroup label="గతంలో వాడిన పేర్లు (Saved Names)">
+                    <optgroup label="Saved Names">
                       {savedNames.map((n, i) => (
                         <option key={i} value={n}>🏷️ {n}</option>
                       ))}
@@ -552,7 +552,7 @@ export const CameraView: React.FC<CameraViewProps> = ({
                     fontWeight: 600
                   }}>
                     <Tag size={13} color="#34d399" />
-                    <span>వాడుతున్న పేరు: "{activeContinuousName}"</span>
+                    <span>Active Name: "{activeContinuousName}"</span>
                     <button
                       onClick={handleResetContinuousName}
                       title="Clear name / Ask every time"
@@ -569,12 +569,12 @@ export const CameraView: React.FC<CameraViewProps> = ({
                         gap: '2px'
                       }}
                     >
-                      <X size={11} /> క్లియర్
+                      <X size={11} /> Clear
                     </button>
                   </div>
                 ) : (
                   <span style={{ fontSize: '0.78rem', color: '#94a3b8' }}>
-                    💬 (Enter కొడితే పేరు అడుగుతుంది)
+                    💬 (Press Enter to set name)
                   </span>
                 )}
               </div>
@@ -808,10 +808,10 @@ export const CameraView: React.FC<CameraViewProps> = ({
               </div>
               <div>
                 <h3 style={{ margin: 0, fontSize: '1.25rem', color: '#fff' }}>
-                  ఫోటో పేరు ఎంటర్ చేయండి
+                  Enter Document Name
                 </h3>
                 <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                  గతంలో వాడిన పేరు ఎంచుకోండి లేదా క్రొత్త పేరు టైప్ చేయండి
+                  Choose a previously saved name or type a new one
                 </span>
               </div>
             </div>
@@ -836,7 +836,7 @@ export const CameraView: React.FC<CameraViewProps> = ({
             {/* Dropdown for previously saved names */}
             <div style={{ marginBottom: '1rem' }}>
               <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.86rem', color: '#cbd5e1', marginBottom: '0.4rem', fontWeight: 600 }}>
-                <Tag size={14} color="#818cf8" /> గతంలో వాడిన పేర్లు (Previous Names):
+                <Tag size={14} color="#818cf8" /> Previous Names:
               </label>
               <select
                 value={selectedDropdownName}
@@ -853,7 +853,7 @@ export const CameraView: React.FC<CameraViewProps> = ({
                   cursor: 'pointer'
                 }}
               >
-                <option value="">-- క్రొత్త పేరు టైప్ చేయండి (Type a New Name) --</option>
+                <option value="">-- Type a New Name --</option>
                 {savedNames.map((name, idx) => (
                   <option key={idx} value={name}>
                     📂 {name}
@@ -865,7 +865,7 @@ export const CameraView: React.FC<CameraViewProps> = ({
             {/* Input field for document name */}
             <div style={{ marginBottom: '1rem' }}>
               <label style={{ display: 'block', fontSize: '0.86rem', color: '#cbd5e1', marginBottom: '0.4rem', fontWeight: 600 }}>
-                డాక్యుమెంట్ పేరు (Document Name):
+                Document Name:
               </label>
               <input
                 type="text"
@@ -911,9 +911,9 @@ export const CameraView: React.FC<CameraViewProps> = ({
               />
               <label htmlFor="autoApplyCheckbox" style={{ fontSize: '0.82rem', color: '#e2e8f0', cursor: 'pointer', lineHeight: '1.4' }}>
                 <strong style={{ display: 'block', color: '#a5b4fc', marginBottom: '2px' }}>
-                  ⚡ అస్తమానం పేరు అడగకుండా డైరెక్ట్ గా సేవ్ చేయి
+                  ⚡ Save directly without asking every time
                 </strong>
-                తదుపరి ఫోటోలకి కూడా ఇదే పేరుతో ఆటోమేటిక్ గా కంటిన్యూగా సేవ్ చేయబడుతుంది.
+                Upcoming photos will automatically continue saving with this name.
               </label>
             </div>
 
@@ -948,7 +948,7 @@ export const CameraView: React.FC<CameraViewProps> = ({
                   <span>Saving...</span>
                 ) : (
                   <>
-                    <Check size={18} /> {autoApplyForFuture ? 'సేవ్ చేసి లాక్ చేయి' : 'సేవ్ చేయండి'}
+                    <Check size={18} /> {autoApplyForFuture ? 'Save & Lock Name' : 'Save Document'}
                   </>
                 )}
               </button>

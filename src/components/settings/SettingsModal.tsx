@@ -262,7 +262,7 @@ export const SettingsModal = ({ onClose }: SettingsModalProps) => {
               </button>
             </div>
             <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--text-muted)', lineHeight: '1.4' }}>
-              ఈ SQL స్క్రిప్ట్ ని మీ <strong>Supabase SQL Editor</strong> లో పేస్ట్ చేసి Run చేయండి. ఇది <code>inventory_scans</code> టేబుల్ మరియు <code>scans</code> ఇమేజ్ స్టోరేజ్ బకెట్‌ను క్రియేట్ చేస్తుంది.
+              Paste and run this SQL script in your <strong>Supabase SQL Editor</strong>. This sets up the <code>inventory_scans</code> table and the <code>scans</code> storage bucket with proper RLS policies.
             </p>
           </div>
 

@@ -62,7 +62,7 @@ export const DocumentEditForm = ({ document, onSave, onClose }: DocumentEditForm
         <form onSubmit={handleSubmit}>
           <div style={{ marginBottom: '1.25rem' }}>
             <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.88rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>
-              <Type size={16} /> Document Title (పేరు):
+              <Type size={16} /> Document Title:
             </label>
             <input
               type="text"

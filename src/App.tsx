@@ -135,8 +135,8 @@ function App() {
       if (isRls) {
         alert(
           "⚠️ Supabase Storage Permission Error (RLS Policy)!\n\n" +
-          "Supabase లోని 'scans' స్టోరేజ్ బకెట్ కి ఫొటోలు అప్‌లోడ్ చేయడానికి RLS Permission లేదు.\n\n" +
-          "పరిష్కారం:\n1. Settings లోని 'Supabase SQL Setup Script' ని కాపీ చేయండి.\n2. మీ Supabase ప్రాజెక్ట్ డాష్‌బోర్డ్‌లోని 'SQL Editor' లో పేస్ట్ చేసి RUN చేయండి."
+          "Your Supabase 'scans' storage bucket does not have upload permissions enabled.\n\n" +
+          "Solution:\n1. Copy the 'Supabase SQL Setup Script' from Settings.\n2. Open 'SQL Editor' in your Supabase dashboard and click RUN."
         );
         setShowConfig(true);
       } else {
@@ -364,7 +364,7 @@ function App() {
                 Launch Automatic Mode
               </h3>
               <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.82rem' }}>
-                Space, Enter లేదా బటన్ క్లిక్ చేసి వెంటనే సేవ్ చేయండి (నో పాప్-అప్స్, నో టైమర్)
+                Press Space, Enter, or click button to save instantly (no popups, no timer)
               </p>
             </div>
           </div>
@@ -403,7 +403,7 @@ function App() {
                 Launch Manual Mode
               </h3>
               <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.82rem' }}>
-                Space, Enter లేదా బటన్ క్లిక్ చేసి డాక్యుమెంట్ పేరు లేదా డ్రాప్‌డౌన్ తో సేవ్ చేయండి
+                Press Space, Enter, or click button to save with document name or dropdown
               </p>
             </div>
           </div>
