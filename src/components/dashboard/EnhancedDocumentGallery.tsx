@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import type { DocumentRecord } from '../../types/document';
 import { 
   Search, Trash2, Download, FolderPlus, Folder, Calendar,
@@ -31,9 +31,18 @@ export const EnhancedDocumentGallery = ({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showAddFolderModal, setShowAddFolderModal] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
-  const [, setFoldersState] = useState<string[]>(() => getFolders());
+  const [allFolders, setAllFolders] = useState<string[]>([]);
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState({ current: 0, total: 0 });
+
+  // Load folders from Supabase on mount
+  useEffect(() => {
+    const loadFolders = async () => {
+      const folders = await getFolders();
+      setAllFolders(folders);
+    };
+    loadFolders();
+  }, []);
 
   // Filter documents by search term
   const filteredDocs = useMemo(() => {
@@ -51,7 +60,6 @@ export const EnhancedDocumentGallery = ({
     const grouped = groupDocumentsByFolder(filteredDocs);
     
     // Add all created folders even if empty
-    const allFolders = getFolders();
     allFolders.forEach(folderName => {
       if (!grouped.has(folderName)) {
         grouped.set(folderName, []);
@@ -59,7 +67,7 @@ export const EnhancedDocumentGallery = ({
     });
     
     return grouped;
-  }, [filteredDocs]);
+  }, [filteredDocs, allFolders]);
 
   // Select/Deselect handlers
   const handleSelectAll = () => {
@@ -164,10 +172,10 @@ export const EnhancedDocumentGallery = ({
     setShowAddFolderModal(true);
   };
 
-  const handleCreateFolder = () => {
+  const handleCreateFolder = async () => {
     try {
-      const updated = addFolder(newFolderName);
-      setFoldersState(updated);
+      const updated = await addFolder(newFolderName);
+      setAllFolders(updated);
       setNewFolderName('');
       setShowAddFolderModal(false);
       alert(`Folder "${newFolderName}" created successfully!`);
@@ -191,8 +199,8 @@ export const EnhancedDocumentGallery = ({
         await onUpdateFolder({ ...doc, folder: undefined }, '');
       }
       
-      const updated = deleteFolder(folderName);
-      setFoldersState(updated);
+      const updated = await deleteFolder(folderName);
+      setAllFolders(updated);
       onRefresh();
     }
   };

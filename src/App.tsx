@@ -36,7 +36,7 @@ function App() {
 
   // Saved document names for dropdown selection
   const [savedNames, setSavedNames] = useState<string[]>(() => getSavedDocumentNames());
-  const [folders, setFolders] = useState<string[]>(() => getFolders());
+  const [folders, setFolders] = useState<string[]>([]);
 
   const [showCamera, setShowCamera] = useState(false);
   const [showConfig, setShowConfig] = useState(false);
@@ -56,7 +56,8 @@ function App() {
       const docs = await loadAllDocuments();
       setDocuments(docs);
       setSavedNames(getSavedDocumentNames());
-      setFolders(getFolders());
+      const loadedFolders = await getFolders();
+      setFolders(loadedFolders);
       setStats({
         totalScans: docs.length,
         pendingCount: 0

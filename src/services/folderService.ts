@@ -1,48 +1,76 @@
 import type { DocumentRecord } from '../types/document';
-
-const FOLDERS_KEY = 'docuscan_folders';
+import { supabase } from './supabaseClient';
 
 /**
- * Get all folders
+ * Get all folders from Supabase by querying distinct folder values from documents
  */
-export const getFolders = (): string[] => {
+export const getFolders = async (): Promise<string[]> => {
   try {
-    const stored = localStorage.getItem(FOLDERS_KEY);
-    if (!stored) return []; // Start with no folders - user creates them
-    const parsed = JSON.parse(stored);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
+    const { data, error } = await supabase
+      .from('inventory_scans')
+      .select('folder')
+      .not('folder', 'is', null)
+      .order('folder');
+
+    if (error) {
+      console.error('Error fetching folders from Supabase:', error);
+      return [];
+    }
+
+    // Get unique folder names
+    const uniqueFolders = [...new Set(data.map(item => item.folder).filter(Boolean))];
+    return uniqueFolders as string[];
+  } catch (error) {
+    console.error('Error in getFolders:', error);
     return [];
   }
 };
 
 /**
- * Add a new folder
+ * Add a new folder (by creating a placeholder or just validating the name)
+ * Note: Folders are implicitly created when a document is assigned to them
  */
-export const addFolder = (folderName: string): string[] => {
+export const addFolder = async (folderName: string): Promise<string[]> => {
   const clean = folderName.trim();
-  if (!clean) return getFolders();
+  if (!clean) {
+    const folders = await getFolders();
+    return folders;
+  }
 
-  const current = getFolders();
+  const current = await getFolders();
   
   // Check if folder already exists (case-insensitive)
   if (current.some(f => f.toLowerCase() === clean.toLowerCase())) {
     throw new Error('Folder already exists');
   }
 
-  const updated = [...current, clean];
-  localStorage.setItem(FOLDERS_KEY, JSON.stringify(updated));
-  return updated;
+  // Folders are created implicitly when documents are assigned to them
+  // So we just return the updated list including the new folder
+  return [...current, clean];
 };
 
 /**
- * Delete a folder
+ * Delete a folder and unassign all documents from it
  */
-export const deleteFolder = (folderName: string): string[] => {
-  const current = getFolders();
-  const updated = current.filter(f => f !== folderName);
-  localStorage.setItem(FOLDERS_KEY, JSON.stringify(updated));
-  return updated;
+export const deleteFolder = async (folderName: string): Promise<string[]> => {
+  try {
+    // Update all documents in this folder to have no folder
+    const { error } = await supabase
+      .from('inventory_scans')
+      .update({ folder: null })
+      .eq('folder', folderName);
+
+    if (error) {
+      console.error('Error deleting folder from Supabase:', error);
+      throw new Error('Failed to delete folder');
+    }
+
+    // Return updated folder list
+    return await getFolders();
+  } catch (error) {
+    console.error('Error in deleteFolder:', error);
+    throw error;
+  }
 };
 
 /**
