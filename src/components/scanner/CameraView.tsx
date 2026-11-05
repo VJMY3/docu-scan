@@ -44,8 +44,29 @@ export const CameraView: React.FC<CameraViewProps> = ({
   const [showFlash, setShowFlash] = useState(false);
   const [statusToast, setStatusToast] = useState<string | null>(null);
 
-  // Folder selection
-  const [selectedFolder, setSelectedFolder] = useState<string>('');
+  // Folder selection - Initialize with MANHAR if in auto mode
+  const [selectedFolder, setSelectedFolder] = useState<string>(() => {
+    // If in auto mode and folders exist, try to set MANHAR as default
+    if (initialMode === 'auto' && folders && folders.length > 0) {
+      const manharFolder = folders.find(f => f.toUpperCase() === 'MANHAR' || f.toUpperCase() === 'MANOHAR');
+      if (manharFolder) {
+        console.log('Auto mode: Initialized with folder', manharFolder);
+        return manharFolder;
+      }
+    }
+    return '';
+  });
+
+  // Backup: Also set via useEffect if folders load later
+  useEffect(() => {
+    if (mode === 'auto' && folders.length > 0 && !selectedFolder) {
+      const manharFolder = folders.find(f => f.toUpperCase() === 'MANHAR' || f.toUpperCase() === 'MANOHAR');
+      if (manharFolder) {
+        setSelectedFolder(manharFolder);
+        console.log('Auto mode: useEffect set folder to', manharFolder);
+      }
+    }
+  }, [mode, folders]);
 
   // Continuous auto-apply name in Manual mode
   const [activeContinuousName, setActiveContinuousName] = useState<string | null>(null);
