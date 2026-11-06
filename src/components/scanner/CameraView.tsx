@@ -44,23 +44,33 @@ export const CameraView: React.FC<CameraViewProps> = ({
   const [showFlash, setShowFlash] = useState(false);
   const [statusToast, setStatusToast] = useState<string | null>(null);
 
-  // Folder selection - Initialize with MANHAR if in auto mode
+  // Folder selection - Initialize with MANHAR ONLY in auto mode, empty in manual mode
   const [selectedFolder, setSelectedFolder] = useState<string>(() => {
     // If in auto mode, ALWAYS set to MANHAR
     if (initialMode === 'auto') {
       console.log('Auto mode: Initialized with MANHAR folder');
       return 'MANHAR';
     }
+    // Manual mode starts with no folder
     return '';
   });
 
-  // Backup: Ensure MANHAR is set in auto mode
+  // Backup: Ensure MANHAR is ALWAYS set in auto mode, and clear in manual mode
   useEffect(() => {
-    if (mode === 'auto' && selectedFolder !== 'MANHAR') {
-      setSelectedFolder('MANHAR');
-      console.log('Auto mode: Forced folder to MANHAR');
+    if (mode === 'auto') {
+      // Force MANHAR in auto mode
+      if (selectedFolder !== 'MANHAR') {
+        setSelectedFolder('MANHAR');
+        console.log('Auto mode: Forced folder to MANHAR');
+      }
+    } else {
+      // Clear folder when switching to manual mode
+      if (selectedFolder === 'MANHAR') {
+        setSelectedFolder('');
+        console.log('Manual mode: Cleared MANHAR folder');
+      }
     }
-  }, [mode]);
+  }, [mode, selectedFolder]);
 
   // Continuous auto-apply name in Manual mode
   const [activeContinuousName, setActiveContinuousName] = useState<string | null>(null);
@@ -198,13 +208,14 @@ export const CameraView: React.FC<CameraViewProps> = ({
     setRecentThumbnails(prev => [previewUrl, ...prev.slice(0, 4)]);
 
     if (mode === 'auto') {
-      // Automatic Mode: Save directly to database
+      // Automatic Mode: Save directly to database with MANHAR folder
       const title = `Auto Scan #${sessionCount} (${timeStr})`;
       setSessionCount(c => c + 1);
-      showToast(`⚡ ${title} saving...`);
-      const success = await onCapture(file, title, 'auto', selectedFolder || undefined);
+      console.log('Auto mode capture - Folder:', selectedFolder, '| Expected: MANHAR');
+      showToast(`⚡ ${title} saving to MANHAR folder...`);
+      const success = await onCapture(file, title, 'auto', selectedFolder || 'MANHAR');
       if (success !== false) {
-        showToast(`✓ ${title} saved to database!`);
+        showToast(`✓ ${title} saved to MANHAR folder!`);
       }
     } else {
       // Manual Mode:
