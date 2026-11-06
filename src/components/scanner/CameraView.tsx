@@ -46,27 +46,21 @@ export const CameraView: React.FC<CameraViewProps> = ({
 
   // Folder selection - Initialize with MANHAR if in auto mode
   const [selectedFolder, setSelectedFolder] = useState<string>(() => {
-    // If in auto mode and folders exist, try to set MANHAR as default
-    if (initialMode === 'auto' && folders && folders.length > 0) {
-      const manharFolder = folders.find(f => f.toUpperCase() === 'MANHAR' || f.toUpperCase() === 'MANOHAR');
-      if (manharFolder) {
-        console.log('Auto mode: Initialized with folder', manharFolder);
-        return manharFolder;
-      }
+    // If in auto mode, ALWAYS set to MANHAR
+    if (initialMode === 'auto') {
+      console.log('Auto mode: Initialized with MANHAR folder');
+      return 'MANHAR';
     }
     return '';
   });
 
-  // Backup: Also set via useEffect if folders load later
+  // Backup: Ensure MANHAR is set in auto mode
   useEffect(() => {
-    if (mode === 'auto' && folders.length > 0 && !selectedFolder) {
-      const manharFolder = folders.find(f => f.toUpperCase() === 'MANHAR' || f.toUpperCase() === 'MANOHAR');
-      if (manharFolder) {
-        setSelectedFolder(manharFolder);
-        console.log('Auto mode: useEffect set folder to', manharFolder);
-      }
+    if (mode === 'auto' && selectedFolder !== 'MANHAR') {
+      setSelectedFolder('MANHAR');
+      console.log('Auto mode: Forced folder to MANHAR');
     }
-  }, [mode, folders]);
+  }, [mode]);
 
   // Continuous auto-apply name in Manual mode
   const [activeContinuousName, setActiveContinuousName] = useState<string | null>(null);
@@ -506,8 +500,8 @@ export const CameraView: React.FC<CameraViewProps> = ({
             </button>
           </div>
 
-          {/* Folder Selection Dropdown */}
-          {folders && folders.length > 0 && (
+          {/* Folder Selection Dropdown - Only show in Manual mode */}
+          {mode === 'manual' && folders && folders.length > 0 && (
             <div style={{
               display: 'flex',
               alignItems: 'center',
@@ -559,11 +553,9 @@ export const CameraView: React.FC<CameraViewProps> = ({
                 fontWeight: 600
               }}>
                 <span style={{ color: '#a5b4fc' }}>⚡ Automatic (Direct Save)</span>
-                {selectedFolder && (
-                  <span style={{ color: '#34d399', marginLeft: '0.5rem' }}>
-                    → 📁 {selectedFolder}
-                  </span>
-                )}
+                <span style={{ color: '#34d399', marginLeft: '0.5rem' }}>
+                  → 📁 MANHAR
+                </span>
               </div>
             ) : (
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
